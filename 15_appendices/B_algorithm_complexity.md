@@ -101,7 +101,7 @@ flowchart TD
 </table>
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[O 1] --> B[O log n]
     B --> C[O n]
     C --> D[O n log n]
