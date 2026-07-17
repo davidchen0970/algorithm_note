@@ -236,7 +236,7 @@ border: "ab"
 KMP 的 Prefix Function 保存的就是每個前綴的最長 Border 長度。
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["pattern 已匹配前綴"] --> B["失敗時找最長 Border"]
     B --> C["保留可重用的匹配長度"]
     C --> D["避免從 0 重新比較"]
@@ -630,7 +630,7 @@ std::vector<int> zSearch(
 Z Algorithm 維護一段 `[left, right)`，表示目前已知與 Prefix 匹配的最右區間。當 i 落在這段內，可以重用之前算過的 Z 值。
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["Prefix"] --> B["Z Box [left, right)"]
     B --> C["i 在 box 內時重用資訊"]
     C --> D["再向右延伸比較"]
