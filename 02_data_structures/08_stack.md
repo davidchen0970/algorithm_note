@@ -81,6 +81,24 @@ Top
 
 接著 Pop 一次會移除 2，新的 Top 變成 7。
 
+```mermaid
+flowchart TB
+    T[Top] --> N2[2，最後 Push]
+    N2 --> N7[7]
+    N7 --> N4[4，最早 Push]
+```
+
+Pop 之後：
+
+```mermaid
+flowchart TB
+    T[Top] --> N7[7]
+    N7 --> N4[4]
+    P[2] -. 已移除 .-> X[ ]
+```
+
+圖形由上到下表示 Stack 由 Top 到 Bottom，不代表元素位於 Linked List。
+
 #### Stack 的核心不是反向資料
 
 Stack 經常產生反向順序，但更重要的模型是：
@@ -188,6 +206,19 @@ struct Frame
 - 一個 Value 是否足以區分不同候選？
 
 如果任何答案需要位置，保存 Index 往往較合適。
+
+```mermaid
+flowchart TD
+    A[Stack Element 要保存什麼] --> B{之後需要原位置或距離嗎}
+    B -->|是| C[優先保存 Index]
+    B -->|否| D{只靠 Value 能區分候選嗎}
+    D -->|是| E[可保存 Value]
+    D -->|否| F{是否需要恢復呼叫狀態}
+    F -->|是| G[保存完整 Frame]
+    F -->|否| H[保存 Node 或具名 State]
+```
+
+這是選擇 State 的檢查流程，不是固定規則。實際型別仍以 Postcondition 與後續更新需求為準。
 
 ### 8.3 第二步：安全使用 Stack 介面
 
@@ -343,6 +374,21 @@ bool isValidParentheses(std::string_view text)
 
 順序同時代表巢狀結構。Top 是下一個右括號唯一可以合法配對的開括號。
 
+```mermaid
+flowchart LR
+    C1[讀取左括號 (] --> P1[Push (]
+    P1 --> C2[讀取左括號 []
+    C2 --> P2[Push []
+    P2 --> C3[讀取左括號 {]
+    C3 --> P3[Push {]
+    P3 --> C4[讀取右括號 }]
+    C4 --> M{Top 是否為相配的左括號}
+    M -->|是| O[Pop {]
+    M -->|否或 Stack 空| E[回傳 false]
+```
+
+讀到右括號時不能搜尋 Stack 中間位置。若 Top 不相配，就表示巢狀順序已經錯誤。
+
 #### Loop Invariant
 
 每輪開始前：
@@ -373,6 +419,20 @@ bool isValidParentheses(std::string_view text)
 #### 逐輪執行
 
 輸入：`{[()]}`
+
+```mermaid
+stateDiagram-v2
+    [*] --> S0: Stack = 空
+    S0 --> S1: 讀到 {，Push
+    S1 --> S2: 讀到 [，Push
+    S2 --> S3: 讀到 (，Push
+    S3 --> S2: 讀到 )，配對後 Pop
+    S2 --> S1: 讀到 ]，配對後 Pop
+    S1 --> S0: 讀到 }，配對後 Pop
+    S0 --> [*]: 輸入結束且 Stack 為空
+```
+
+狀態名稱表示目前未配對括號數量。實際 Stack 內容仍由下方逐輪表格呈現。
 
 <table>
 <tr><th>目前 Byte</th><th>動作</th><th>Stack 由底到頂</th></tr>
@@ -467,6 +527,22 @@ std::vector<int> preorder(TreeNode* root)
 
 Stack 是 LIFO。若希望下一個先處理 Left，必須先 Push Right，再 Push Left。Left 位於 Top，會先被 Pop。
 
+```mermaid
+flowchart TB
+    R[Root] --> L[Left]
+    R --> X[Right]
+```
+
+處理 Root 後的 Push 順序：
+
+```mermaid
+flowchart TB
+    T[Top] --> L[Left，後 Push，先 Pop]
+    L --> X[Right，先 Push，後 Pop]
+```
+
+因此實際走訪順序是 Root、Left、Right。若先 Push Left，下一個被處理的反而會是 Right。
+
 #### Stack Element 語意
 
 > Stack 保存已發現但尚未走訪的 Tree Node，Top 是下一個處理對象。
@@ -525,6 +601,20 @@ result = left - right;
 ```
 
 若寫成 `right - left`，加法與乘法可能看不出錯誤，但減法與除法會失敗。
+
+```mermaid
+flowchart LR
+    A[讀取 8] --> B[Push 8]
+    B --> C[讀取 3]
+    C --> D[Push 3]
+    D --> E[讀取減號]
+    E --> F[第一次 Pop<br/>right = 3]
+    F --> G[第二次 Pop<br/>left = 8]
+    G --> H[計算 left - right = 5]
+    H --> I[Push 5]
+```
+
+Binary Operator 的 Operand 順序由 Postfix 語法決定，不能依 Pop 順序直接寫成第一個減第二個。
 
 ### 8.7 完整案例：計算後序運算式
 
@@ -646,6 +736,24 @@ std::optional<long long> evaluatePostfix(
 
 合法的完整 Postfix Expression 最後應留下恰好一個結果。
 
+```mermaid
+flowchart TD
+    A[讀取下一個 Token] --> B{Operand 或 Operator}
+    B -->|Operand| C[解析成功後 Push]
+    B -->|Operator| D{Stack 至少有兩個 Operand}
+    D -->|否| E[Expression 非法]
+    D -->|是| F[Pop right，再 Pop left]
+    F --> G[計算並 Push 結果]
+    C --> H{還有 Token 嗎}
+    G --> H
+    H -->|是| A
+    H -->|否| I{Stack 大小是否為 1}
+    I -->|是| J[回傳 Top]
+    I -->|否| E
+```
+
+此流程把 Operand 不足與最後殘留多個結果視為兩類不同的格式錯誤。
+
 #### 算術 Overflow
 
 此範例著重 Stack 結構，尚未檢查 `long long` 加法、減法與乘法 Overflow。若題目限制沒有保證結果範圍，應在運算前檢查，或使用能表達更大範圍的數值型別。
@@ -687,6 +795,20 @@ Monotonic Stack 讓 Stack 中對應的 Value 維持某種單調關係，例如�
 > Stack 保存目前已走訪，但尚未找到右側第一個嚴格更大值的 Index。
 
 當新值比 Top 對應 Value 更大時，Top 的答案就能確定。
+
+```mermaid
+flowchart LR
+    S5[5，仍未解決] --> S3[3，仍未解決]
+    S3 --> S1[1，Top]
+    C[目前值 4] --> Q{4 是否大於 Top}
+    Q -->|4 > 1| P1[Pop 1，答案是 4]
+    P1 --> Q2{4 是否大於新 Top}
+    Q2 -->|4 > 3| P2[Pop 3，答案是 4]
+    P2 --> Q3{4 是否大於新 Top}
+    Q3 -->|4 不大於 5| K[停止 Pop，Push 4]
+```
+
+目前值可以一次解決多個候選，但遇到不小於目前值的 Top 時必須停止。
 
 #### 為什麼可以 Pop
 
@@ -806,6 +928,23 @@ Stack 對應值：5, 3, 1
 
 輸入：`[2, 1, 2, 4, 3]`
 
+```mermaid
+stateDiagram-v2
+    [*] --> I0
+    I0: i=0，Push index 0，Stack=[0]
+    I0 --> I1
+    I1: i=1，Push index 1，Stack=[0,1]
+    I1 --> I2
+    I2: i=2，Pop 1，answer[1]=2，再 Push 2
+    I2 --> I3
+    I3: i=3，Pop 2 與 0，答案皆為 4，再 Push 3
+    I3 --> I4
+    I4: i=4，Push index 4，Stack=[3,4]
+    I4 --> [*]: 剩餘 Index 沒有右側嚴格更大值
+```
+
+狀態轉移顯示一個目前值可能連續 Pop 多個 Index。
+
 <table>
 <tr><th>i</th><th>nums[i]</th><th>被 Pop 的 Index</th><th>確定答案</th><th>Stack Index</th></tr>
 <tr><td>0</td><td>2</td><td>無</td><td>無</td><td>0</td></tr>
@@ -874,6 +1013,17 @@ nums[stack.top()] <= nums[i]
 
 並逐一確認題目要的是嚴格更大，還是大於等於。
 
+```mermaid
+flowchart TD
+    A[目前值與 Stack Top 相等] --> B{題目要求什麼}
+    B -->|嚴格更大| C[相等不構成答案，不 Pop]
+    B -->|大於等於| D[相等已構成答案，Pop]
+    C --> E[比較條件使用 Top Value 小於目前值]
+    D --> F[比較條件使用 Top Value 小於等於目前值]
+```
+
+比較符號不是寫法偏好，而是 Postcondition 的直接反映。
+
 ### 8.11 第七步：分析攤銷複雜度
 
 Monotonic Stack 常包含巢狀迴圈：
@@ -906,6 +1056,22 @@ for (...)
 ```
 
 Stack 相關動作總量為 O(n)。即使某一輪 Pop 很多元素，這些元素之後不會再次進入 Stack。
+
+```mermaid
+flowchart LR
+    E1[Index 0] -->|Push 1 次| S[Stack]
+    E2[Index 1] -->|Push 1 次| S
+    E3[Index 2] -->|Push 1 次| S
+    S -->|每個 Index 最多 Pop 1 次| D[答案確定或流程結束]
+```
+
+聚合計算為：
+
+```text
+n 次 Push + 最多 n 次 Pop = O(n)
+```
+
+巢狀 `while` 的單輪成本可能很高，但同一個 Index 不會被重複 Pop。
 
 #### 最差單輪與總時間不同
 
@@ -966,6 +1132,18 @@ Undo：從 Index 5 移除 3 個字元
 - Redo Stack：已撤銷且可重做的動作。
 
 執行新修改時，通常需要清空 Redo Stack，因為歷史分支已改變。這項行為屬於產品規格，應明確定義。
+
+```mermaid
+stateDiagram-v2
+    [*] --> Current
+    Current --> Modified: 執行新修改，Push 到 Undo
+    Modified --> Undone: Undo，動作移到 Redo
+    Undone --> Modified: Redo，動作移回 Undo
+    Undone --> Branched: 執行另一個新修改
+    Branched --> Branched: Redo Stack 已清空
+```
+
+Undo 與 Redo 的 Stack Element 可以是完整舊 State，也可以是具備正向與反向方法的 Command。
 
 #### Ownership 與資源
 
@@ -1068,6 +1246,19 @@ bool stack_pop(
 
 介面以 `bool` 回報成功或失敗，呼叫端不應在失敗時讀取輸出參數。
 
+```mermaid
+flowchart TD
+    A[Stack 動作] --> B{Push 嗎}
+    B -->|是| C{size < capacity}
+    C -->|是| D[寫入 data[size]，再增加 size]
+    C -->|否| E[Overflow，回傳 false]
+    B -->|否，Top 或 Pop| F{size > 0}
+    F -->|是| G[讀取 data[size - 1]]
+    F -->|否| H[Underflow，回傳 false]
+```
+
+固定容量 Stack 的核心 Invariant 是 `0 <= size <= capacity`，有效資料位於 `[0, size)`。
+
 #### 動態成長
 
 若需要 Dynamic Stack，可使用 `realloc` 擴大 Buffer，但必須處理：
@@ -1101,6 +1292,21 @@ bool stack_pop(
 </table>
 
 ### 8.15 常見問題與判讀
+
+```mermaid
+flowchart TD
+    A[Stack 結果異常] --> B{是否在空 Stack 上讀取}
+    B -->|是| C[先修正 empty 檢查與條件順序]
+    B -->|否| D{Stack Element 是否保存足夠資訊}
+    D -->|否| E[改存 Index、Node 或完整 Frame]
+    D -->|是| F{Pop 時答案是否已確定}
+    F -->|否| G[重新檢查 Pop 條件與 Invariant]
+    F -->|是| H{重複值語意是否正確}
+    H -->|否| I[同步小於與小於等於條件]
+    H -->|是| J[逐輪列出由底到頂內容]
+```
+
+這個排查流程適合先找第一個被破壞的 Stack State，再檢查最終輸出。
 
 <table>
 <tr><th>現象</th><th>可能原因</th><th>第一輪檢查</th></tr>
