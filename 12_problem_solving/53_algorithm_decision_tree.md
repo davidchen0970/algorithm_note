@@ -1,89 +1,175 @@
-# 第 53 章　演算法選擇決策樹
+## 第 53 章　演算法選擇決策樹
 
-> 狀態：第一版草稿。目標是先建立可閱讀、可擴寫的章節骨架。
+### 適用範圍
 
-## 本章目標
+本章將常見題型整理成決策流程。決策樹用來提出候選方法，不取代 Precondition、正確性證明與複雜度分析。
 
-讀完本章後，你應能：
+### 53.1 主決策樹
 
-- [ ] 能用自己的話說明「是否排序或具有單調性」
-- [ ] 能用自己的話說明「是否為連續區間」
-- [ ] 能用自己的話說明「是否為最短路徑」
-- [ ] 能用自己的話說明「權重與負權重」
-
-## 1. 核心概念
-
-- 是否排序或具有單調性
-- 是否為連續區間
-- 是否為最短路徑
-- 權重與負權重
-- 相依關係
-- 重複狀態
-- 動態更新
-- Greedy 或完整搜尋
-
-## 2. 解題時怎麼判斷
-
-1. 先寫清楚輸入、輸出與限制。
-2. 建立最小案例，確認名詞與邊界定義。
-3. 先提出容易驗證的基礎解法。
-4. 找出重複工作、可利用的順序或狀態。
-5. 寫下時間與空間複雜度，再決定是否需要改善。
-
-## 3. C++ 起始範例
-
-```cpp
-#include <iostream>
-#include <vector>
-using namespace std;
-
-int main() {
-    // 先用小型輸入確認假設，再逐步補上演算法。
-    vector<int> data{3, 1, 4, 1, 5};
-    for (int value : data) {
-        cout << value << ' ';
-    }
-    cout << '\n';
-}
+```mermaid
+flowchart TD
+    A[定義輸入、輸出、限制] --> B{答案是否為 Graph 關係}
+    B -->|是| G{最短路、連通、相依或 MST}
+    G --> G1[依 Edge 方向與 Weight 選方法]
+    B -->|否| C{是否為連續區間}
+    C -->|是| W[Window、Prefix、Deque、Range Query]
+    C -->|否| D{是否可排序或已有單調性}
+    D -->|是| S[Binary Search、Two Pointers、Greedy]
+    D -->|否| E{是否有重複 State}
+    E -->|是| P[Memoization / DP]
+    E -->|否| F[Enumeration、Backtracking、Hash 或其他模型]
 ```
 
-這段程式只作為章節共用的編譯起點。正式擴寫時，應替換成能呈現本章核心概念的完整範例，並補上輸入、輸出與逐步追蹤。
+每個葉節點都只是下一步調查方向。
 
-## 4. 容易混淆的地方
+### 53.2 排序與單調性
 
-- 不要只憑題目關鍵字選演算法，必須確認成立條件。
-- 對索引、空集合、重複值、負數與極端值另行測試。
-- 複雜度要依實際走訪次數與資料結構成本計算。
-- 若使用遞迴或額外容器，記得列入空間成本。
+```mermaid
+flowchart TD
+    A[資料有序或可排序] --> B{找邊界位置嗎}
+    B -->|是| C[Lower / Upper Bound]
+    B -->|否| D{兩端移動可排除候選嗎}
+    D -->|是| E[Two Pointers]
+    D -->|否| F{局部選擇可證明安全嗎}
+    F -->|是| G[Greedy]
+    F -->|否| H[排序後掃描、DP 或搜尋]
+```
 
-## 5. 建議測試
+排序前要檢查原 Index、穩定性與連續性需求。
 
-- 空輸入或最小合法輸入
-- 單一元素
-- 全部相同
-- 已排序與反向排序
-- 含負數、零與最大值
-- 能迫使演算法走到最差路徑的案例
+### 53.3 連續區間
 
-## 6. 練習題方向
+- 固定長度且 State 可增量更新：固定 Sliding Window。
+- 可變長度且 Validity 單調：Variable Sliding Window。
+- 大量靜態 Sum Query：Prefix Sum。
+- Sum 等於 k 且可含負數：Prefix Sum + Hash。
+- Window Maximum：Monotonic Deque。
+- 動態 Range：Fenwick / Segment Tree。
 
-1. 寫一個最直接的版本，標記每個步驟的成本。
-2. 建立一個會讓直覺解法失敗的反例。
-3. 用 5 至 10 筆資料手動追蹤狀態。
-4. 比較兩種解法的時間、空間與可讀性。
+```mermaid
+flowchart TD
+    A[連續區間] --> B{固定長度}
+    B -->|是| C[Fixed Window]
+    B -->|否| D{Expand Shrink 單調嗎}
+    D -->|是| E[Variable Window]
+    D -->|否| F{可由 Prefix 關係描述嗎}
+    F -->|是| G[Prefix + Hash / Binary Search]
+    F -->|否| H[DP、Deque、Tree]
+```
 
-## 7. 完成前自我檢查
+### 53.4 Graph 分支
 
-- [ ] 我能說明演算法成立的前提。
-- [ ] 我能解釋每個主要狀態或資料結構的用途。
-- [ ] 我能列出時間與空間複雜度。
-- [ ] 我測過邊界案例與反例。
-- [ ] 我能在不看筆記的情況下重寫核心流程。
+```mermaid
+flowchart TD
+    A[Graph 問題] --> B{主要目標}
+    B -->|Reachability/Component| C[BFS / DFS]
+    B -->|相依順序| D[Topological Sort]
+    B -->|單源最短路| E[依 Weight 選 BFS、0-1 BFS、Dijkstra、Bellman-Ford]
+    B -->|連接全部 Node 最低成本| F[MST]
+    B -->|動態合併查詢| G[DSU]
+```
 
-## 待補內容
+Directed、Undirected 與 Weight 是必要前置資訊。
 
-- [ ] 完整概念說明
-- [ ] 至少兩個逐步範例
-- [ ] 一份可直接編譯的 C++ 完整程式
-- [ ] 常見錯誤程式與修正方式
-- [ ] 基礎、變化與綜合練習各一題
+### 53.5 DP 分支
+
+若選擇序列會產生重複 State：
+
+```mermaid
+flowchart TD
+    A[重複子問題] --> B{State 由哪些欄位唯一決定}
+    B --> C[定義 Transition]
+    C --> D[定義 Base Case]
+    D --> E{Dependency 是否無環}
+    E -->|是| F[Memoization 或 Bottom-up]
+    E -->|否| G[重新定義 State 或改用 Graph 方法]
+```
+
+常見分類：
+
+- Prefix / Sequence DP。
+- Grid DP。
+- Knapsack。
+- Subsequence DP。
+- Interval DP。
+- Tree DP。
+
+### 53.6 Greedy 或完整搜尋
+
+Greedy 需要 Exchange、Stay-ahead、Cut Property 等證明。若無法證明，先使用：
+
+- Enumeration。
+- Backtracking。
+- DP。
+- Branch and Bound。
+
+```mermaid
+flowchart TD
+    A[提出局部最佳選擇] --> B{可證明存在最佳解包含它嗎}
+    B -->|是| C[Greedy]
+    B -->|否| D[找反例]
+    D --> E[DP 或完整搜尋]
+```
+
+### 53.7 動態更新
+
+| Update / Query | 常見工具 |
+|---|---|
+| 無 Update，多次 Prefix Sum | Prefix Sum |
+| 批次 Range Add，最後一次輸出 | Difference Array |
+| Point Update、Prefix Sum | Fenwick Tree |
+| 一般 Range Query / Update | Segment Tree |
+| 動態 Connected Component 合併 | DSU |
+
+### 53.8 複雜度過濾
+
+先由限制估算可接受規模：
+
+```text
+n 約 10^5：通常不能 O(n²)
+n 約 20：2^n 可能可行
+n 約 10：n! 仍需評估
+V、E 大：優先 Adjacency List
+```
+
+這些只是量級判讀，實際限制還受常數、記憶體、語言與時間限制影響。
+
+### 53.9 決策結果驗證
+
+選出候選方法後，仍需回答：
+
+1. Precondition 是否成立？
+2. State 或 Invariant 是什麼？
+3. 每次移動或選擇排除哪些候選？
+4. 是否一定終止？
+5. 時間與空間是否符合限制？
+6. 反例與邊界案例是否通過？
+
+### 53.10 常見誤判
+
+| 誤判 | 檢查方向 |
+|---|---|
+| 有兩個 Pointer 就叫 Sliding Window | 是否維護連續 Window State |
+| 有「最短」就用 BFS | Edge Cost 是否相同 |
+| 有「相依」就一定能排序 | Graph 是否有 Cycle |
+| 有最佳化就用 Greedy | 是否有正確性證明 |
+| 有區間就用 Prefix Sum | Operation 是否可由 Prefix 抵消 |
+| 有重複工作就一定是 DP | State 是否有限且 Transition 明確 |
+
+### 53.11 本章檢查表
+
+- 我先定義問題，再走決策樹。
+- 我知道決策樹只提出候選方法。
+- 我會確認排序、單調性、連續性與 Weight。
+- 我能區分 Graph、DP、Greedy、Window 與搜尋問題。
+- 我會用輸入限制過濾不可行複雜度。
+- 我能為最後選擇的方法補上證明與測試。
+
+### 53.12 本章重點
+
+- 決策樹用於縮小方法範圍，不取代正確性推導。
+- 排序與單調性常導向 Binary Search、Two Pointers 或 Greedy。
+- 連續區間需區分 Window、Prefix 與動態 Range Query。
+- Graph 方法由目標、方向與 Weight 決定。
+- 重複 State 可考慮 DP，但要先定義 State 與 Transition。
+- Greedy 沒有證明時，應回到搜尋、DP 或反例分析。
