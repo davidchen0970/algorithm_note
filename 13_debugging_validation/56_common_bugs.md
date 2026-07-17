@@ -1,89 +1,220 @@
-# 第 56 章　常見 Bug 類型
+## 第 56 章　常見 Bug 類型
 
-> 狀態：第一版草稿。目標是先建立可閱讀、可擴寫的章節骨架。
+### 適用範圍
 
-## 本章目標
+本章整理演算法實作中經常出現的 Bug 類型。目的不是背錯誤清單，而是看到錯誤現象時，能快速縮小檢查範圍。
 
-讀完本章後，你應能：
+常見 Bug 通常集中在：
 
-- [ ] 能用自己的話說明「Off-by-one 與越界」
-- [ ] 能用自己的話說明「空輸入與無窮迴圈」
-- [ ] 能用自己的話說明「Base Case 與狀態還原」
-- [ ] 能用自己的話說明「Visited 時機」
+- 區間與 Index。
+- 空輸入與最小輸入。
+- 迴圈是否持續前進。
+- 遞迴 Base Case。
+- Backtracking 狀態還原。
+- Graph 的 Visited 時機。
+- Integer Overflow。
+- Comparator 規則。
+- Heap 過期資料。
+- DP State 與初始化。
 
-## 1. 核心概念
+```mermaid
+flowchart TD
+    A[程式結果錯誤] --> B{"崩潰或越界嗎"}
+    B -->|是| C[檢查 Index、空輸入、生命週期]
+    B -->|否| D{"無法停止嗎"}
+    D -->|是| E[檢查進度、Base Case、Visited]
+    D -->|否| F[檢查 State、初始化、型別與更新順序]
+```
 
-- Off-by-one 與越界
-- 空輸入與無窮迴圈
-- Base Case 與狀態還原
-- Visited 時機
-- Integer Overflow
-- Comparator
-- 過期 Heap 資料
-- DP 初始化
+### 56.1 Off-by-one 與越界
 
-## 2. 解題時怎麼判斷
+Off-by-one 是端點多一格或少一格。
 
-1. 先寫清楚輸入、輸出與限制。
-2. 建立最小案例，確認名詞與邊界定義。
-3. 先提出容易驗證的基礎解法。
-4. 找出重複工作、可利用的順序或狀態。
-5. 寫下時間與空間複雜度，再決定是否需要改善。
-
-## 3. C++ 起始範例
+錯誤版本：
 
 ```cpp
-#include <iostream>
-#include <vector>
-using namespace std;
-
-int main() {
-    // 先用小型輸入確認假設，再逐步補上演算法。
-    vector<int> data{3, 1, 4, 1, 5};
-    for (int value : data) {
-        cout << value << ' ';
-    }
-    cout << '\n';
+for (int i = 0; i <= static_cast<int>(nums.size()); ++i)
+{
+    std::cout << nums[i] << '\n';
 }
 ```
 
-這段程式只作為章節共用的編譯起點。正式擴寫時，應替換成能呈現本章核心概念的完整範例，並補上輸入、輸出與逐步追蹤。
+合法 Index 是 0 到 `size - 1`，因此條件應為 `< size`。
 
-## 4. 容易混淆的地方
+#### 固定檢查
 
-- 不要只憑題目關鍵字選演算法，必須確認成立條件。
-- 對索引、空集合、重複值、負數與極端值另行測試。
-- 複雜度要依實際走訪次數與資料結構成本計算。
-- 若使用遞迴或額外容器，記得列入空間成本。
+- 空輸入時 `size - 1` 是否 underflow？
+- `i + 1` 是否仍小於 size？
+- `right` 是最後合法位置，還是下一個位置？
+- `end()` 是否被解參考？
 
-## 5. 建議測試
+### 56.2 空輸入與最小輸入
 
-- 空輸入或最小合法輸入
-- 單一元素
-- 全部相同
-- 已排序與反向排序
-- 含負數、零與最大值
-- 能迫使演算法走到最差路徑的案例
+很多程式只在一般資料下成立：
 
-## 6. 練習題方向
+```cpp
+int maximum = nums[0];
+```
 
-1. 寫一個最直接的版本，標記每個步驟的成本。
-2. 建立一個會讓直覺解法失敗的反例。
-3. 用 5 至 10 筆資料手動追蹤狀態。
-4. 比較兩種解法的時間、空間與可讀性。
+空 Array 時會越界。應由規格決定：
 
-## 7. 完成前自我檢查
+- 空輸入是否非法。
+- 是否回傳 `optional`。
+- 是否有預設值。
+- 是否在呼叫前保證非空。
 
-- [ ] 我能說明演算法成立的前提。
-- [ ] 我能解釋每個主要狀態或資料結構的用途。
-- [ ] 我能列出時間與空間複雜度。
-- [ ] 我測過邊界案例與反例。
-- [ ] 我能在不看筆記的情況下重寫核心流程。
+建議先測：
 
-## 待補內容
+```text
+[]
+[x]
+[x, y]
+```
 
-- [ ] 完整概念說明
-- [ ] 至少兩個逐步範例
-- [ ] 一份可直接編譯的 C++ 完整程式
-- [ ] 常見錯誤程式與修正方式
-- [ ] 基礎、變化與綜合練習各一題
+### 56.3 無窮迴圈
+
+迴圈必須有明確進度。
+
+Binary Search 常見問題：
+
+```cpp
+left = mid;
+```
+
+若 `mid == left`，區間可能不再縮小。應依區間定義更新為 `mid + 1` 或改變另一端。
+
+檢查時問：
+
+```text
+每一輪後，哪個量一定變小或更接近終止條件？
+```
+
+### 56.4 Base Case 與狀態還原
+
+遞迴 Bug 常來自：
+
+- Base Case 缺少最小輸入。
+- Recursive Case 沒有縮小問題。
+- Backtracking 離開分支前沒有還原狀態。
+
+```cpp
+path.push_back(value);
+backtrack(...);
+path.pop_back();
+```
+
+每一項狀態修改，都應有對應還原，例如 `used[i] = true` 對應 `used[i] = false`。
+
+### 56.5 Visited 時機
+
+Graph Traversal 若太晚標記 Visited，同一 Node 可能被重複加入 Queue 或 Stack。
+
+常見做法是在第一次發現並加入容器時標記：
+
+```cpp
+visited[next] = true;
+pending.push(next);
+```
+
+若是 Recursive DFS，通常在進入函式後立即標記。
+
+### 56.6 Integer Overflow
+
+即使最後答案使用 `long long`，中間運算仍可能先以 `int` 溢位：
+
+```cpp
+long long area = width * height;
+```
+
+若兩者都是 int，乘法先以 int 執行。應先轉型：
+
+```cpp
+long long area = 1LL * width * height;
+```
+
+也要注意：
+
+- Prefix Sum。
+- 路徑成本。
+- 組合數。
+- `left + right`。
+- INF 加法。
+
+### 56.7 Comparator
+
+`std::sort` Comparator 必須表示嚴格弱序。
+
+錯誤：
+
+```cpp
+return a <= b;
+```
+
+當 `a == b` 時，兩個方向都可能回傳 true。
+
+正確：
+
+```cpp
+return a < b;
+```
+
+多欄位排序要明確處理相等情況，不要讓規則互相矛盾。
+
+### 56.8 過期 Heap 資料
+
+某些演算法會將同一 Node 的不同版本放入 Heap。舊版本不一定能從中間刪除，因此取出時要檢查是否已過期。
+
+```cpp
+if (distance != best[node])
+{
+    continue;
+}
+```
+
+Lazy Deletion 也需要在讀取 Top 前持續移除失效項目。
+
+### 56.9 DP 初始化
+
+DP 常見錯誤：
+
+- 不可達 State 被初始化為 0。
+- 最小值問題使用太小的 INF。
+- Base Case 漏設。
+- Bottom-up 順序讀到未完成 State。
+- 原地更新覆蓋仍需要的舊值。
+
+初始化值必須符合 State 語意，而不是所有題目都填 0。
+
+### 56.10 Bug 快速對照
+
+<table>
+<tr><th>現象</th><th>優先檢查</th></tr>
+<tr><td>偶爾崩潰</td><td>越界、空輸入、失效 Pointer、Stack 深度</td></tr>
+<tr><td>少一筆或多一筆</td><td>Off-by-one、區間端點、迴圈上限</td></tr>
+<tr><td>程式不停止</td><td>迴圈進度、遞迴縮小、Visited</td></tr>
+<tr><td>大資料才錯</td><td>Overflow、複雜度、遞迴深度</td></tr>
+<tr><td>答案重複</td><td>Visited 太晚、Backtracking 去重、重複 Edge</td></tr>
+<tr><td>最佳值異常</td><td>DP 初始化、INF、Comparator、過期 Heap 資料</td></tr>
+</table>
+
+### 56.11 本章檢查表
+
+- 我已測試空輸入與單一元素。
+- 我已明確定義區間端點。
+- 每個迴圈都有可證明的進度。
+- 每個遞迴都有 Base Case，而且問題會縮小。
+- 每個 Backtracking 修改都有對應還原。
+- Graph 的 Visited 標記時機明確。
+- 中間運算型別足以保存最大值。
+- Comparator 使用嚴格比較。
+- Heap Top 使用前會排除過期資料。
+- DP 初始化符合 State 語意。
+
+### 56.12 本章重點
+
+- 常見 Bug 多集中在邊界、狀態、型別與更新時機。
+- Off-by-one 應從區間定義檢查，而不是反覆試 `<` 與 `<=`。
+- 無窮迴圈與遞迴通常代表問題沒有持續縮小。
+- Backtracking 與 Graph Traversal 要特別關注狀態修改時機。
+- Overflow 可能在指定給大型別前已經發生。
+- Comparator、Heap 與 DP 都有必須維持的結構條件。
