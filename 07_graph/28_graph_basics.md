@@ -38,6 +38,7 @@ Graph 題目的第一個難點通常不是選 BFS 或 DFS，而是先辨識輸�
 ### 快速導覽
 
 - [Graph 到底是什麼](#281-graph-到底是什麼)
+- [Graph 與 Tree 的差別](#2811-graph-與-tree-的差別)
 - [Directed 與 Undirected Graph](#282-directed-與-undirected-graph)
 - [Weighted 與 Unweighted Graph](#283-weighted-與-unweighted-graph)
 - [Path、Walk、Cycle 與 Reachability](#284-pathwalkcycle-與-reachability)
@@ -96,6 +97,172 @@ Edge 可以代表：
 - 狀態轉換。
 
 同一個故事可能對應不同 Graph 問題。城市與道路可以問 Reachability、最少道路數、最低成本或連接全部城市的成本，演算法也會不同。
+
+
+### 28.1.1 Graph 與 Tree 的差別
+
+Tree 可以視為一種受到較多限制的 Graph。
+
+Graph 只要求有 Node 與 Edge。它可以有方向、可以形成 Cycle、可以不連通，也可能在同一組 Node 之間有多條路。
+
+Tree 則通常具有更明確的結構。以一棵包含 V 個 Node 的無向 Tree 為例：
+
+- 整棵 Tree 必須連通。
+- Tree 不能有 Cycle。
+- 任意兩個 Node 之間恰好只有一條 Simple Path。
+- Edge 數量一定是 V - 1。
+
+因此可以先記成：
+
+```text
+Tree 是 Graph 的特殊情況。
+Graph 不一定是 Tree。
+```
+
+#### 先看兩個小型結構
+
+以下結構是一棵 Tree：
+
+```mermaid
+graph TD
+    A[A] --- B[B]
+    A --- C[C]
+    B --- D[D]
+    B --- E[E]
+```
+
+它是連通的，而且沒有 Cycle。A 到 E 只有一條 Simple Path：
+
+```text
+A -> B -> E
+```
+
+以下結構是 Graph，但不是 Tree：
+
+```mermaid
+graph TD
+    A[A] --- B[B]
+    B --- C[C]
+    C --- A
+    C --- D[D]
+```
+
+A、B、C 形成 Cycle。A 到 C 也不只一條 Simple Path：
+
+```text
+A -> C
+A -> B -> C
+```
+
+因為存在 Cycle，也存在多條路，所以它不是 Tree。
+
+#### Graph 與 Tree 比較
+
+<table>
+<tr><th>比較項目</th><th>Graph</th><th>Tree</th></tr>
+<tr><td>基本組成</td><td>Node 與 Edge</td><td>Node 與 Edge</td></tr>
+<tr><td>是否一定連通</td><td>不一定</td><td>是</td></tr>
+<tr><td>是否允許 Cycle</td><td>可能允許</td><td>不允許</td></tr>
+<tr><td>兩個 Node 之間的 Path</td><td>可能沒有、只有一條或有多條</td><td>恰好一條 Simple Path</td></tr>
+<tr><td>Edge 數量</td><td>依 Graph 而定</td><td>V 個 Node 時為 V - 1</td></tr>
+<tr><td>是否需要 Root</td><td>一般 Graph 不需要</td><td>抽象無向 Tree 不一定需要；Rooted Tree 會指定 Root</td></tr>
+<tr><td>Parent 關係</td><td>一般 Graph 沒有固定 Parent</td><td>指定 Root 後，每個非 Root Node 有一個 Parent</td></tr>
+<tr><td>走訪時是否需要 Visited</td><td>通常需要，避免 Cycle 與重複走訪</td><td>若由 Parent 往 Children 走，常可不使用；若以無向 Adjacency List 保存，仍需排除 Parent 或使用 Visited</td></tr>
+</table>
+
+#### Rooted Tree 是什麼
+
+無向 Tree 本身不一定指定 Root。當題目選定一個 Node 作為 Root 後，才會產生 Parent、Child、Depth 與 Subtree 等關係。
+
+```mermaid
+graph TD
+    A[A，Root] --> B[B]
+    A --> C[C]
+    B --> D[D]
+    B --> E[E]
+```
+
+此時：
+
+- A 沒有 Parent。
+- B 與 C 的 Parent 是 A。
+- D 與 E 的 Parent 是 B。
+- 以 B 為起點往下的節點形成 B 的 Subtree。
+
+如果改以 B 為 Root，Parent 與 Child 關係會改變，但底層 Node 與 Edge 沒有改變。
+
+#### 為什麼 Tree DFS 常看不到 visited
+
+一般 Graph 可能有 Cycle。若不記錄 `visited`，DFS 可能重複走訪，甚至無法停止。
+
+Rooted Tree 若只由 Parent 往 Children 走，每次都朝下一層前進，不會回到祖先，因此常不需要額外的 `visited`。
+
+但若 Tree 使用無向 Adjacency List 保存，每條 Edge 會出現兩個方向。從 u 走到 v 後，v 的 Neighbor 又包含 u。這時仍需要排除 Parent：
+
+```cpp
+void dfsTree(
+    const std::vector<std::vector<int>>& graph,
+    int node,
+    int parent)
+{
+    for (int next : graph[node])
+    {
+        if (next == parent)
+        {
+            continue;
+        }
+
+        dfsTree(graph, next, node);
+    }
+}
+```
+
+這裡的 `parent` 用來避免沿同一條無向 Edge 立刻走回上一個 Node。
+
+#### 如何判斷 Undirected Graph 是否為 Tree
+
+對一個有 V 個 Node 的 Undirected Graph，可以檢查：
+
+1. 所有 Node 是否連通。
+2. 是否沒有 Cycle。
+
+若兩者都成立，它就是 Tree。
+
+對 Simple Undirected Graph，也常使用等價條件：
+
+```text
+Graph 連通，而且 Edge 數 E = V - 1。
+```
+
+只檢查 `E = V - 1` 並不夠。Graph 仍可能有一個 Component 含 Cycle，另一個 Component 不連通。因此還要檢查連通性。
+
+```mermaid
+flowchart TD
+    A[Undirected Graph] --> B{"所有 Node 是否連通"}
+    B -->|否| C[不是 Tree]
+    B -->|是| D{"是否存在 Cycle"}
+    D -->|是| C
+    D -->|否| E[是 Tree]
+```
+
+#### 解題時如何判斷題目給的是 Tree 還是一般 Graph
+
+看到以下條件時，資料通常是 Tree：
+
+- 題目直接說明輸入是一棵 Tree。
+- 有 V 個 Node 與 V - 1 條 Undirected Edge，並保證連通。
+- 每個非 Root Node 都有唯一 Parent。
+- 題目討論 Subtree、Ancestor、Depth 或 Lowest Common Ancestor。
+
+看到以下情況時，應先當成一般 Graph 分析：
+
+- 可能存在 Cycle。
+- 可能有多個 Connected Components。
+- 兩個 Node 之間可能有多條路。
+- Edge 具有任意方向。
+- 題目沒有保證連通或沒有保證 Edge 數為 V - 1。
+
+不要只因為圖畫得像樹，就直接假設它是 Tree。應以題目給的連通性、Cycle、Edge 數與 Parent 關係判斷。
 
 ### 28.2 Directed 與 Undirected Graph
 
@@ -760,6 +927,8 @@ flowchart TD
 ### 28.21 本章檢查表
 
 - 我能說明 Node 與 Edge 在題目中代表什麼。
+- 我能說明 Tree 為什麼是 Graph 的特殊情況。
+- 我能使用連通、無 Cycle 與 Edge 數判斷 Undirected Graph 是否為 Tree。
 - 我能區分 Directed 與 Undirected Graph。
 - 我知道 Undirected Adjacency List 通常要加入兩個方向。
 - 我能區分 Weighted 與 Unweighted Graph。
@@ -781,6 +950,7 @@ flowchart TD
 ### 28.22 本章重點
 
 - Graph 由 Node 集合 V 與 Edge 集合 E 構成，解題前應先定義兩者語意。
+- Tree 是連通且沒有 Cycle 的特殊 Graph；V 個 Node 的 Tree 有 V - 1 條 Edge。
 - Directed Edge 只有一個方向；Undirected Edge 在 Adjacency List 中通常需加入兩個方向。
 - Unweighted 最短路通常指最少 Edge 數，Weighted 最短路則考慮 Weight Sum。
 - 普通 BFS 的最短性依賴所有 Edge 成本相同。
