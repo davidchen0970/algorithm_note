@@ -2,30 +2,28 @@
 
 ### 適用範圍
 
-本章介紹 Topological Sort，包括 Dependency Graph、Directed Acyclic Graph、Indegree、Kahn’s Algorithm、DFS-based Topological Sort、Cycle Detection、順序唯一性，以及字典序最小拓撲順序。
+本章介紹 Topological Sort，包括 Dependency Graph、Directed Acyclic Graph、Indegree、Kahn's Algorithm、DFS-based Topological Sort、Cycle Detection、順序唯一性，以及字典序最小拓撲順序。
 
-Topological Sort 處理的是 Directed Graph 中的先後限制。若 Edge `u -> v` 表示「u 必須先於 v」，合法輸出必須讓 u 出現在 v 前方。它不是依 Node Value 排序，也不保證結果唯一。
-
-真正需要先確認的是：
-
-- Edge 方向代表「Prerequisite 指向 Course」，還是相反。
-- Graph 是否 Directed。
-- 是否要求完整排列、只判斷可行性，或判斷順序是否唯一。
-- 重複 Edge 是否會重複增加 Indegree。
-- Graph 中是否存在 Cycle。
-- 多個目前可選 Node 時，能否任意選，還是要求字典序最小。
-- DFS 版本是否區分「正在目前路徑」與「已完成」。
+Topological Sort 處理的是 Directed Graph 中的先後限制。若 Edge `u -> v` 表示「u 必須先於 v」，合法輸出必須讓 `u` 出現在 `v` 前方。它不是依 Node Value 排序，也不保證結果唯一。原始章節也特別提醒，真正開始前要確認 Edge 方向、Graph 是否 Directed、是否要求完整排列、是否判斷唯一性，以及是否有 Cycle。citeturn39search1
 
 本章會建立一套固定流程：
 
-1. 定義 Node 與 Dependency Edge 的語意。
-2. 確認 Graph 必須是 DAG 才存在完整拓撲順序。
-3. Kahn Algorithm 建立 Indegree，並初始化所有 Indegree 0 Node。
-4. 每次移除一個目前沒有未完成前置條件的 Node。
-5. 刪除其 Outgoing Edge，更新 Neighbor Indegree。
-6. 以完成 Node 數判斷是否存在 Cycle。
-7. DFS 版本以三色 State 偵測 Back Edge，並在離開 Node 時加入結果。
-8. 若要求唯一性或字典序，改變可選集合與額外判斷。
+- 定義 Node 與 Dependency Edge 的語意。
+- 確認 Graph 必須是 DAG 才存在完整拓撲順序。
+- Kahn Algorithm 建立 Indegree，並初始化所有 Indegree 0 Node。
+- 每次移除一個目前沒有未完成前置條件的 Node。
+- 刪除其 Outgoing Edge，更新 Neighbor Indegree。
+- 以完成 Node 數判斷是否存在 Cycle。
+- DFS 版本以三色 State 偵測 Back Edge，並在離開 Node 時加入結果。
+- 若要求唯一性或字典序，改變可選集合與額外判斷。
+
+```mermaid
+flowchart TD
+    A["Directed Dependency Graph"] --> B["確認 Edge 語意"]
+    B --> C["確認是否為 DAG"]
+    C --> D["選擇 Kahn 或 DFS"]
+    D --> E["輸出合法拓撲順序或偵測 Cycle"]
+```
 
 ### 適用讀者
 
@@ -38,27 +36,27 @@ Topological Sort 處理的是 Directed Graph 中的先後限制。若 Edge `u ->
 
 ### 快速導覽
 
-- [Topological Sort 到底保證什麼](#311-topological-sort-到底保證什麼)
-- [Dependency Graph 與 DAG](#312-dependency-graph-與-dag)
-- [第一步：確認 Edge 方向](#313-第一步確認-edge-方向)
-- [Indegree](#314-indegree)
-- [Kahn’s Algorithm](#315-kahns-algorithm)
-- [完整案例：課程順序](#316-完整案例課程順序)
-- [Kahn Algorithm 的正確性](#317-kahn-algorithm-的正確性)
-- [使用完成數量偵測 Cycle](#318-使用完成數量偵測-cycle)
-- [DFS-based Topological Sort](#319-dfs-based-topological-sort)
-- [完整案例：三色 DFS](#3110-完整案例三色-dfs)
-- [Kahn 與 DFS 的比較](#3111-kahn-與-dfs-的比較)
-- [順序唯一性](#3112-順序唯一性)
-- [字典序最小拓撲順序](#3113-字典序最小拓撲順序)
-- [重複 Edge 與輸入驗證](#3114-重複-edge-與輸入驗證)
-- [正確性、終止性與複雜度](#3115-正確性終止性與複雜度)
-- [C 語言中的 Topological Sort](#3116-c-語言中的-topological-sort)
-- [系統化 Debug](#3117-系統化-debug)
-- [常見問題與判讀](#3118-常見問題與判讀)
-- [練習題方向](#3119-練習題方向)
-- [本章檢查表](#3120-本章檢查表)
-- [本章重點](#3121-本章重點)
+- [31.1 Topological Sort 到底保證什麼](#311-topological-sort-到底保證什麼)
+- [31.2 Dependency Graph 與 DAG](#312-dependency-graph-與-dag)
+- [31.3 第一步：確認 Edge 方向](#313-第一步確認-edge-方向)
+- [31.4 Indegree](#314-indegree)
+- [31.5 Kahn's Algorithm](#315-kahns-algorithm)
+- [31.6 完整案例：課程順序](#316-完整案例課程順序)
+- [31.7 Kahn Algorithm 的正確性](#317-kahn-algorithm-的正確性)
+- [31.8 使用完成數量偵測 Cycle](#318-使用完成數量偵測-cycle)
+- [31.9 DFS-based Topological Sort](#319-dfs-based-topological-sort)
+- [31.10 完整案例：三色 DFS](#3110-完整案例三色-dfs)
+- [31.11 Kahn 與 DFS 的比較](#3111-kahn-與-dfs-的比較)
+- [31.12 順序唯一性](#3112-順序唯一性)
+- [31.13 字典序最小拓撲順序](#3113-字典序最小拓撲順序)
+- [31.14 重複 Edge 與輸入驗證](#3114-重複-edge-與輸入驗證)
+- [31.15 正確性、終止性與複雜度](#3115-正確性終止性與複雜度)
+- [31.16 C 語言中的 Topological Sort](#3116-c-語言中的-topological-sort)
+- [31.17 系統化 Debug](#3117-系統化-debug)
+- [31.18 常見問題與判讀](#3118-常見問題與判讀)
+- [31.19 練習題方向](#3119-練習題方向)
+- [31.20 本章檢查表](#3120-本章檢查表)
+- [31.21 本章重點](#3121-本章重點)
 
 ### 31.1 Topological Sort 到底保證什麼
 
@@ -70,25 +68,31 @@ u 在輸出中出現在 v 前方
 
 ```mermaid
 flowchart LR
-    A[需求分析] --> B[設計]
-    B --> C[實作]
-    C --> D[測試]
+    A["需求分析"] --> B["設計"]
+    B --> C["實作"]
+    C --> D["測試"]
 ```
 
-合法順序必須保持每條依賴的方向，例如：
+若 Edge 表示「前一步必須先完成」，合法順序必須保持每條依賴方向。例如：
 
 ```text
-需求分析、設計、實作、測試
+需求分析 -> 設計 -> 實作 -> 測試
 ```
 
-Topological Sort 不要求無 Edge 的 Node 依特定 Value 排序，因此結果可能不唯一。
+合法輸出可以是：
 
-下列 Graph：
+```text
+需求分析, 設計, 實作, 測試
+```
+
+#### 結果不一定唯一
+
+Topological Sort 不要求無 Edge 的 Node 依特定 Value 排序，因此結果可能不唯一。原始章節也以 A、B 都指向 C 為例，說明 `A, B, C` 與 `B, A, C` 都合法。citeturn39search1
 
 ```mermaid
 flowchart TD
-    A[A] --> C[C]
-    B[B] --> C
+    A["A"] --> C["C"]
+    B["B"] --> C
 ```
 
 合法順序包括：
@@ -100,6 +104,10 @@ B, A, C
 
 A 與 B 之間沒有依賴，因此兩種順序都合法。
 
+#### Topological Sort 不是 Sort by Value
+
+若 Node 編號是 0、1、2、3，拓撲順序不一定要由小到大。若題目要求字典序最小，才需要額外規則，例如 Min-heap。
+
 ### 31.2 Dependency Graph 與 DAG
 
 Topological Sort 只對 Directed Acyclic Graph，也就是 DAG，存在完整順序。
@@ -108,8 +116,8 @@ Topological Sort 只對 Directed Acyclic Graph，也就是 DAG，存在完整順
 
 ```mermaid
 flowchart LR
-    A[A 必須先於 B] --> B[B 必須先於 C]
-    B --> C[C 必須先於 A]
+    A["A 必須先於 B"] --> B["B 必須先於 C"]
+    B --> C["C 必須先於 A"]
     C --> A
 ```
 
@@ -123,6 +131,22 @@ Edge `u -> u` 本身就是 Cycle，因此不存在完整拓撲順序。
 
 Graph 不必 Weakly Connected。多個互不相連的 DAG Component 仍可合併成拓撲順序，只要各 Component 內部依賴成立。
 
+例子：
+
+```text
+A -> B
+C -> D
+E isolated
+```
+
+合法輸出可以是：
+
+```text
+A, C, E, B, D
+```
+
+只要 A 在 B 前，C 在 D 前即可。
+
 ### 31.3 第一步：確認 Edge 方向
 
 課程題常提供 Pair：
@@ -131,7 +155,7 @@ Graph 不必 Weakly Connected。多個互不相連的 DAG Component 仍可合併
 (course, prerequisite)
 ```
 
-若語意是先修課 prerequisite 必須先完成，建圖應為：
+若語意是先修課 `prerequisite` 必須先完成，建圖應為：
 
 ```text
 prerequisite -> course
@@ -139,16 +163,27 @@ prerequisite -> course
 
 ```mermaid
 flowchart TD
-    P[Prerequisite] --> C[Course]
+    P["Prerequisite"] --> C["Course"]
 ```
 
 若方向建反，演算法仍可能產生某個順序，但語意會相反。
 
 建圖前應先寫一句話：
 
-> Edge `u -> v` 表示 u 必須先於 v。
+```text
+Edge u -> v 表示 u 必須先於 v。
+```
 
-接著所有 Indegree、Output 與驗證都依同一語意進行。
+接著所有 Indegree、Output 與驗證都依同一語意進行。原始章節也把「確認 Edge 方向」列為第一步。citeturn39search1
+
+#### 常見方向混淆
+
+| 輸入格式 | 正確語意 | 建圖方向 |
+|---|---|---|
+| `(course, prerequisite)` | prerequisite 先於 course | `prerequisite -> course` |
+| `(before, after)` | before 先於 after | `before -> after` |
+| `(u, v)` 且題目說 u depends on v | v 先於 u | `v -> u` |
+| `(u, v)` 且題目說 u must be before v | u 先於 v | `u -> v` |
 
 ### 31.4 Indegree
 
@@ -156,13 +191,15 @@ Indegree 是指向某個 Node 的 Edge 數量。
 
 在 Dependency Graph 中，它可解讀為：
 
-> 目前仍未被移除的前置依賴數量。
+```text
+目前仍未被移除的前置依賴數量
+```
 
 ```mermaid
 flowchart TD
-    A[A] --> C[C<br/>Indegree 2]
-    B[B] --> C
-    C --> D[D<br/>Indegree 1]
+    A["A"] --> C["C<br/>Indegree 2"]
+    B["B"] --> C
+    C --> D["D<br/>Indegree 1"]
 ```
 
 建立方式：
@@ -179,25 +216,42 @@ for (int u = 0; u < nodeCount; ++u)
 
 Indegree 0 表示目前沒有尚未完成的前置條件，可以加入結果。
 
-注意「目前」二字。隨著 Node 被移除，其 Outgoing Edge 也視為移除，Neighbor Indegree 會降低。
+注意「目前」二字。隨著 Node 被移除，其 Outgoing Edge 也視為移除，Neighbor Indegree 會降低。原始章節也強調 Indegree 0 是「目前」沒有尚未完成前置條件。citeturn39search1
 
-### 31.5 Kahn’s Algorithm
+#### Indegree 常見錯誤
 
-Kahn’s Algorithm 使用 Queue 保存目前 Indegree 為 0，而且尚未輸出的 Node。
+- 對 Edge Source 增加 Indegree，而不是 Target。
+- 只初始化有 Edge 的 Node，漏掉孤立 Node。
+- 重複 Edge 去重不一致，導致 Indegree 無法降到 0。
+- Edge 方向建反，導致 Indegree 全部不符合語意。
+
+### 31.5 Kahn's Algorithm
+
+Kahn's Algorithm 使用 Queue 保存目前 Indegree 為 0，而且尚未輸出的 Node。
 
 ```mermaid
 flowchart TD
-    A[計算所有 Indegree] --> B[所有 Indegree 0 Node 入列]
-    B --> C{Queue 是否為空}
-    C -->|否| D[取出一個 Node 並加入結果]
-    D --> E[移除其 Outgoing Edge]
-    E --> F[Neighbor Indegree 減一]
-    F --> G{是否變成 0}
-    G -->|是| H[Neighbor 入列]
+    A["計算所有 Indegree"] --> B["所有 Indegree 0 Node 入列"]
+    B --> C{"Queue 是否為空"}
+    C -->|否| D["取出一個 Node 並加入結果"]
+    D --> E["移除其 Outgoing Edge"]
+    E --> F["Neighbor Indegree 減一"]
+    F --> G{"是否變成 0"}
+    G -->|是| H["Neighbor 入列"]
     G -->|否| C
     H --> C
-    C -->|是| I[比較結果數量與 Node 數]
+    C -->|是| I["比較結果數量與 Node 數"]
 ```
+
+#### Queue 中的 Node 代表什麼
+
+Queue 保存的是：
+
+```text
+目前沒有未完成前置依賴、而且尚未輸出的 Node
+```
+
+這不是一般 BFS 的「距離層」，而是依賴條件解除後的可選集合。
 
 #### C++ 實作
 
@@ -236,6 +290,7 @@ std::vector<int> topologicalSortKahn(
     {
         const int node = ready.front();
         ready.pop();
+
         order.push_back(node);
 
         for (int next : graph[node])
@@ -258,6 +313,10 @@ std::vector<int> topologicalSortKahn(
 }
 ```
 
+#### 為什麼最後要比較 order.size()
+
+任何流程最後 Queue 都會空。DAG 完成時 Queue 會空；Cycle 卡住時 Queue 也會空。因此不能只用 Queue 空判斷是否有 Cycle，要比較完成 Node 數是否等於 V。原始章節也明確提醒，Queue 最後為空本身不能判定 Cycle。citeturn39search1
+
 ### 31.6 完整案例：課程順序
 
 假設：
@@ -270,9 +329,9 @@ std::vector<int> topologicalSortKahn(
 
 ```mermaid
 flowchart TD
-    C0[Course 0] --> C2[Course 2]
-    C1[Course 1] --> C2
-    C2 --> C3[Course 3]
+    C0["Course 0"] --> C2["Course 2"]
+    C1["Course 1"] --> C2
+    C2 --> C3["Course 3"]
 ```
 
 初始 Indegree：
@@ -306,17 +365,23 @@ stateDiagram-v2
     S4 --> [*]: 共輸出 4 個 Node
 ```
 
-若 Queue 初始順序不同，也可能得到 `1,0,2,3`，仍是合法拓撲順序。
+若 Queue 初始順序不同，也可能得到：
+
+```text
+1, 0, 2, 3
+```
+
+仍是合法拓撲順序。原始章節也指出，此案例可能得到 `0,1,2,3` 或 `1,0,2,3`，兩者都合法。citeturn39search1
 
 ### 31.7 Kahn Algorithm 的正確性
 
 #### Queue Element 語意
 
-> Queue 保存目前殘餘 Graph 中 Indegree 0、尚未輸出的 Node。
+Queue 保存目前殘餘 Graph 中 Indegree 0、尚未輸出的 Node。
 
 #### 為什麼可安全輸出 Indegree 0 Node
 
-Indegree 0 表示沒有尚未輸出的 Node 指向它，因此把它放在目前順序的下一個位置，不會違反任何剩餘依賴。
+Indegree 0 表示沒有尚未輸出的 Node 指向它。因此把它放在目前順序的下一個位置，不會違反任何剩餘依賴。
 
 #### 移除 Outgoing Edge
 
@@ -324,9 +389,9 @@ Indegree 0 表示沒有尚未輸出的 Node 指向它，因此把它放在目前
 
 ```mermaid
 flowchart LR
-    U[已輸出 u] -->|原 Edge u 到 v| V[v]
-    U -. 移除後 .-> X[該依賴已完成]
-    X --> D[indegree v 減一]
+    U["已輸出 u"] -->|"原 Edge u 到 v"| V["v"]
+    U -. "移除後" .-> X["該依賴已完成"]
+    X --> D["indegree v 減一"]
 ```
 
 #### 結束時
@@ -341,40 +406,42 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[Queue 清空] --> B{order size 等於 V 嗎}
-    B -->|是| C[存在完整拓撲順序]
-    B -->|否| D[仍有 Node 未完成]
-    D --> E[剩餘 Node 都有未完成前驅]
-    E --> F[剩餘區域含 Cycle]
+    A["Queue 清空"] --> B{"order size 等於 V 嗎"}
+    B -->|是| C["存在完整拓撲順序"]
+    B -->|否| D["仍有 Node 未完成"]
+    D --> E["剩餘 Node 都有未完成前驅"]
+    E --> F["剩餘區域含 Cycle"]
 ```
 
-不能只看 Queue 是否空。任何合法 DAG 最後 Queue 也會空，關鍵是是否已處理全部 Node。
+不能只看 Queue 是否空。任何合法 DAG 最後 Queue 也會空，關鍵是是否已處理全部 Node。原始章節也有相同提醒。citeturn39search1
 
 ### 31.9 DFS-based Topological Sort
 
 DFS 版本在 Node 的所有 Outgoing Neighbor 都完成後，才把 Node 加入 Postorder，最後反轉。
 
+直覺：
+
 ```text
-先完成所有必須在它後面的 Node
-再加入目前 Node
-最後反轉
+u -> v 表示 u 必須先於 v
+DFS 中先完成 v，再把 u 放入 postorder
+最後反轉 postorder，u 就會在 v 前方
 ```
 
 ```mermaid
 flowchart TD
-    U[u] --> V[v，u 必須先於 v]
-    V --> P1[v 較早加入 Postorder]
-    U --> P2[u 較晚加入 Postorder]
-    P1 --> R[反轉後 u 在 v 前]
+    U["u"] --> V["v，u 必須先於 v"]
+    V --> P1["v 較早加入 Postorder"]
+    U --> P2["u 較晚加入 Postorder"]
+    P1 --> R["反轉後 u 在 v 前"]
     P2 --> R
 ```
 
-DFS 還需要 Cycle Detection。單一 `visited` 不足以區分：
+DFS 還需要 Cycle Detection。單一 visited 不足以區分：
 
 - Node 已完成。
 - Node 正在目前遞迴路徑。
 
-因此常使用三色 State。
+因此常使用三色 State。原始章節也指出，DFS 版本需要區分「正在目前路徑」與「已完成」。citeturn39search1
 
 ### 31.10 完整案例：三色 DFS
 
@@ -388,6 +455,7 @@ State：
 
 ```cpp
 #include <algorithm>
+#include <vector>
 
 bool dfsTopological(
     int node,
@@ -440,18 +508,18 @@ std::vector<int> topologicalSortDfs(
 
 #### Back Edge
 
-若正在處理 u 時遇到 `state[v] == 1`，表示 v 已在目前 DFS Path 上：
+若正在處理 u 時遇到 `state[v] == 1`，表示 v 已在目前 DFS Path 上。
 
 ```mermaid
 flowchart LR
-    A[A Visiting] --> B[B Visiting]
-    B --> C[C Visiting]
+    A["A Visiting"] --> B["B Visiting"]
+    B --> C["C Visiting"]
     C --> A
 ```
 
 這條 Edge 回到 Ancestor，形成 Directed Cycle。
 
-遇到 `state[v] == 2` 不代表 Cycle，因為 v 的 DFS 已完整結束，它不在目前 Path。
+遇到 `state[v] == 2` 不代表 Cycle，因為 v 的 DFS 已完整結束，它不在目前 Path。原始章節也提醒，遇到 Finished Node 不代表 Cycle。citeturn39search1
 
 ### 31.11 Kahn 與 DFS 的比較
 
@@ -466,10 +534,10 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[選擇 Topological Sort] --> B{需要 Indegree、Layer 或唯一性嗎}
-    B -->|是| K[Kahn Algorithm]
-    B -->|否| C{DFS Postorder 是否更符合後續工作}
-    C -->|是| D[DFS-based]
+    A["選擇 Topological Sort"] --> B{"需要 Indegree、Layer 或唯一性嗎"}
+    B -->|是| K["Kahn Algorithm"]
+    B -->|否| C{"DFS Postorder 是否更符合後續工作"}
+    C -->|是| D["DFS-based"]
     C -->|否| K
 ```
 
@@ -477,20 +545,31 @@ flowchart TD
 
 ### 31.12 順序唯一性
 
-在 Kahn Algorithm 中，如果某一步有兩個以上 Ready Node，代表目前至少有多種合法選擇，拓撲順序不唯一。
+在 Kahn Algorithm 中，如果某一步有兩個以上 Ready Node，代表目前至少有多種合法選擇，拓撲順序不唯一。原始章節也說明，要判定唯一性，每一輪 Ready 容器大小都必須恰好為 1，最後仍需確認輸出數量等於 V。citeturn39search1
 
 ```mermaid
 flowchart TD
-    A[Ready Set] --> B{目前可選 Node 數量}
-    B -->|0 且未完成| C[有 Cycle]
-    B -->|1| D[下一個位置被唯一決定]
-    B -->|大於 1| E[存在多種拓撲順序]
+    A["Ready Set"] --> B{"目前可選 Node 數量"}
+    B -->|0 且未完成| C["有 Cycle"]
+    B -->|1| D["下一個位置被唯一決定"]
+    B -->|大於 1| E["存在多種拓撲順序"]
 ```
 
-要判定唯一性：
+#### 唯一性檢查流程
 
-- 每一輪 Ready 容器大小都必須恰好為 1。
-- 最後仍需確認輸出數量等於 V。
+```cpp
+bool unique = true;
+
+while (!ready.empty())
+{
+    if (ready.size() > 1)
+    {
+        unique = false;
+    }
+
+    // process one node
+}
+```
 
 若 Graph 有 Cycle，不能只說「不唯一」，而是根本不存在拓撲順序。
 
@@ -503,6 +582,7 @@ flowchart TD
 ```cpp
 #include <functional>
 #include <queue>
+#include <vector>
 
 std::priority_queue<
     int,
@@ -512,12 +592,12 @@ std::priority_queue<
 
 ```mermaid
 flowchart TD
-    A[多個 Indegree 0 Node] --> B[Min-heap]
-    B --> C[每次取最小 Node]
-    C --> D[得到字典序最小拓撲順序]
+    A["多個 Indegree 0 Node"] --> B["Min-heap"]
+    B --> C["每次取最小 Node"]
+    C --> D["得到字典序最小拓撲順序"]
 ```
 
-時間複雜度由 O(V + E) 變成約 O((V + E) log V)，因為 Ready 集合的 Push、Pop 具有對數成本。
+時間複雜度由 O(V + E) 變成約 O((V + E) log V)，因為 Ready 集合的 Push、Pop 具有對數成本。原始章節也有相同複雜度提醒。citeturn39search1
 
 字典序最小不代表順序唯一。即使有多個選擇，也可以用規則選出其中最小的一個。
 
@@ -531,14 +611,14 @@ flowchart TD
 
 若建圖和 Indegree 對重複 Edge 的處理一致，演算法仍可能完成，但語意是否正確取決於問題是否允許平行依賴。
 
-若只對 Adjacency 去重，卻仍重複增加 Indegree，v 可能永遠無法降到 0。
+若只對 Adjacency 去重，卻仍重複增加 Indegree，v 可能永遠無法降到 0。原始章節也特別指出這個風險。citeturn39search1
 
 ```mermaid
 flowchart TD
-    A[讀取 Edge u 到 v] --> B{問題允許重複 Edge 嗎}
-    B -->|是| C[Adjacency 與 Indegree 都保留]
-    B -->|否| D[使用 Set 或排序去重]
-    D --> E[只對唯一 Edge 增加 Indegree]
+    A["讀取 Edge u 到 v"] --> B{"問題允許重複 Edge 嗎"}
+    B -->|是| C["Adjacency 與 Indegree 都保留"]
+    B -->|否| D["使用 Set 或排序去重"]
+    D --> E["只對唯一 Edge 增加 Indegree"]
 ```
 
 建圖時也要驗證：
@@ -566,13 +646,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    V[每個 Node 處理固定次數] --> T[O V]
-    E[每條 Edge 檢查一次] --> U[O E]
-    T --> O[總時間 O V 加 E]
+    V["每個 Node 處理固定次數"] --> T["O(V)"]
+    E["每條 Edge 檢查一次"] --> U["O(E)"]
+    T --> O["總時間 O(V + E)"]
     U --> O
 ```
 
-終止性來自有限 Node 與 Edge，而且 Node State 或 Indegree 只單向前進，不會恢復成未處理狀態。
+終止性來自有限 Node 與 Edge，而且 Node State 或 Indegree 只單向前進，不會恢復成未處理狀態。原始章節也有相同說明。citeturn39search1
 
 ### 31.16 C 語言中的 Topological Sort
 
@@ -631,13 +711,13 @@ Postorder Push 時機
 
 ```mermaid
 flowchart TD
-    A[拓撲結果錯誤] --> B[先確認 Edge 方向]
-    B --> C[重新計算初始 Indegree]
-    C --> D{Ready 是否包含所有 Indegree 0 Node}
-    D -->|否| E[修正初始化]
-    D -->|是| F{每條 Edge 是否恰好減一次}
-    F -->|否| G[檢查重複 Edge 與 Adjacency]
-    F -->|是| H[比較 order size 與 V]
+    A["拓撲結果錯誤"] --> B["先確認 Edge 方向"]
+    B --> C["重新計算初始 Indegree"]
+    C --> D{"Ready 是否包含所有 Indegree 0 Node"}
+    D -->|否| E["修正初始化"]
+    D -->|是| F{"每條 Edge 是否恰好減一次"}
+    F -->|否| G["檢查重複 Edge 與 Adjacency"]
+    F -->|是| H["比較 order size 與 V"]
 ```
 
 重要測試：
@@ -654,6 +734,8 @@ flowchart TD
 - Disconnected DAG。
 - 重複 Edge。
 - 非法 Node Index。
+
+原始章節也列出這些 Debug 記錄項與重要測試。citeturn39search1
 
 ### 31.18 常見問題與判讀
 
@@ -672,15 +754,28 @@ flowchart TD
 | 深 DAG 發生 Stack Overflow | DFS 遞迴深度過大 | 使用 Kahn 或顯式 Stack |
 | 複雜度被寫成 O(V²) | 使用 List 卻按 Matrix 分析 | 依實際表示方式計算 |
 
+這些常見問題也在原始章節中完整列出。citeturn39search1
+
 ### 31.19 練習題方向
 
 #### 基礎題
 
 給定課程數與 Prerequisite Pair，判斷是否能完成全部課程。
 
+檢查重點：
+
+- Edge 方向。
+- Indegree 初始化。
+- `order.size() == V`。
+
 #### 變化題
 
 輸出任意合法課程順序；若不存在，回傳空結果。
+
+檢查重點：
+
+- 多個合法答案都應接受。
+- 不應只和單一順序比對。
 
 #### 綜合題
 
@@ -688,7 +783,7 @@ flowchart TD
 
 ### 31.20 本章檢查表
 
-- 我能說明 Edge `u -> v` 表示 u 必須先於 v。
+- 我能說明 Edge `u -> v` 表示 `u` 必須先於 `v`。
 - 我知道只有 DAG 存在完整 Topological Order。
 - 我能正確計算每個 Node 的 Indegree。
 - 我知道 Indegree 0 表示目前沒有未完成前置依賴。
@@ -713,7 +808,7 @@ flowchart TD
 - 完整拓撲順序存在的必要且充分條件是 Graph 為 DAG。
 - Edge 方向必須先定義清楚，通常由 Prerequisite 指向依賴它的工作。
 - Indegree 表示目前尚未移除的前置依賴數量。
-- Kahn’s Algorithm 每次選擇 Indegree 0 Node，移除其 Outgoing Edge，再更新 Neighbor。
+- Kahn's Algorithm 每次選擇 Indegree 0 Node，移除其 Outgoing Edge，再更新 Neighbor。
 - Queue 清空後必須比較已輸出 Node 數與 V，才能判斷是否含 Cycle。
 - DFS-based 方法在離開 Node 時加入 Postorder，最後反轉得到拓撲順序。
 - DFS 需要三色 State，遇到 Visiting Node 才代表 Directed Cycle。
