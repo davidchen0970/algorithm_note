@@ -401,7 +401,7 @@ bool isValidParentheses(std::string_view text)
 順序同時代表巢狀結構。Top 是下一個右括號唯一可以合法配對的開括號。
 
 ```mermaid
-flowchart LR
+flowchart TD
     C1["讀取左括號：("] --> P1["推入：("]
     P1 --> C2["讀取左括號：[ "]
     C2 --> P2["推入：[ "]
@@ -447,7 +447,7 @@ flowchart LR
 輸入：`{[()]}`
 
 ```mermaid
-flowchart LR
+flowchart TD
     S0["未配對數量 0：Stack 為空"] -->|"讀到 {，推入"| S1["未配對數量 1"]
     S1 -->|"讀到 [，推入"| S2["未配對數量 2"]
     S2 -->|"讀到 (，推入"| S3["未配對數量 3"]
@@ -628,7 +628,7 @@ result = left - right;
 若寫成 `right - left`，加法與乘法可能看不出錯誤，但減法與除法會失敗。
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["讀取 8"] --> B["推入 8"]
     B --> C["讀取 3"]
     C --> D["推入 3"]
@@ -822,7 +822,7 @@ Monotonic Stack 讓 Stack 中對應的 值 維持某種單調關係，例如：
 當新值比 Top 對應 值 更大時，Top 的答案就能確定。
 
 ```mermaid
-flowchart LR
+flowchart TD
     S5["5，尚未取得答案"] --> S3["3，尚未取得答案"]
     S3 --> S1["1，位於頂端"]
     C["目前值 4"] --> Q{"4 大於頂端值？"}
@@ -1153,7 +1153,7 @@ Undo：從 索引 5 移除 3 個字元
 執行新修改時，通常需要清空 Redo Stack，因為歷史分支已改變。這項行為屬於產品規格，應明確定義。
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["目前狀態"] -->|"執行新修改，放入 Undo Stack"| B["修改後狀態"]
     B -->|"Undo：動作移到 Redo Stack"| C["撤銷後狀態"]
     C -->|"Redo：動作移回 Undo Stack"| B
