@@ -79,6 +79,16 @@ head
 
 `head` 不是整條 List 本身，而是第一個 Node 的 Pointer。最後一個 Node 的 `next == nullptr`，表示鏈結結束。
 
+```mermaid
+flowchart LR
+    H[head] --> N1[Node A<br/>value = 4]
+    N1 --> N2[Node B<br/>value = 7]
+    N2 --> N3[Node C<br/>value = 2]
+    N3 --> Z[nullptr]
+```
+
+圖中的 Node A、B、C 代表不同 Node Identity。它們不需要位於連續記憶體，只要 `next` 能依序連接即可。
+
 #### 空 List
 
 空 List 通常表示為：
@@ -162,6 +172,20 @@ node->next = previous->next;
 previous->next = node;
 ```
 
+```mermaid
+flowchart LR
+    subgraph Before[插入前]
+        P1[previous] --> X1[next]
+    end
+
+    subgraph After[插入後]
+        P2[previous] --> N[new node]
+        N --> X2[next]
+    end
+```
+
+第一行先讓新 Node 接住原本的後半段，第二行才讓前驅改指向新 Node。若順序顛倒，原本的 `previous->next` 可能失去入口。
+
 但若題目只給 Index，仍需先走到正確前驅，因此完整動作通常是 O(n)。
 
 #### 刪除為何需要前驅
@@ -233,6 +257,22 @@ previous ← current    next → remaining
        新 previous
 ```
 
+```mermaid
+flowchart LR
+    subgraph Before[本輪開始]
+        P1[previous] --- C1[current]
+        C1 --> N1[next]
+        N1 --> R1[remaining]
+    end
+
+    subgraph After[本輪結束]
+        C2[current 已處理] --> P2[previous 區段]
+        N2[next<br/>下一輪 current] --> R2[remaining]
+    end
+```
+
+圖中兩個 Subgraph 表示改寫前後的邏輯狀態，不表示兩份 Node 副本。
+
 每輪都應能說明：
 
 - 哪一段已完成。
@@ -279,6 +319,24 @@ ListNode dummy{0, head};
 > 檢查 `current->next`，若它是目標，就讓 `current->next` 略過該 Node。
 
 即使目標是原本的 Head，它仍只是 Dummy 後方的一般 Node。
+
+```mermaid
+flowchart LR
+    D[Dummy] --> H[原 Head<br/>value = target]
+    H --> B[下一個 Node]
+    B --> C[後續 List]
+```
+
+刪除原 Head 時，只需把 `Dummy.next` 改成下一個 Node：
+
+```mermaid
+flowchart LR
+    D[Dummy] --> B[新 Head]
+    B --> C[後續 List]
+    H[被移除的原 Head] -. 不再位於結果鏈結 .-> X[ ]
+```
+
+Dummy 讓「刪除 Head」和「刪除中間 Node」使用相同的前驅更新方式。
 
 #### Dummy 的生命週期
 
@@ -367,6 +425,26 @@ current->next = current->next->next;
 ```text
 1 → 2 → 2 → 3
 ```
+
+```mermaid
+flowchart LR
+    D[Dummy] --> A[1]
+    A --> B[2<br/>目標]
+    B --> C[2<br/>目標]
+    C --> E[3]
+```
+
+刪除第一個 2 後，`current` 仍停在值為 1 的 Node：
+
+```mermaid
+flowchart LR
+    D[Dummy] --> A[1<br/>current]
+    A --> C[2<br/>下一個待檢查]
+    C --> E[3]
+    B[已移除的 2] -.-> X[ ]
+```
+
+新的 `current->next` 仍是目標，因此不能立即讓 `current` 前進。
 
 刪除第一個 2 後，`current->next` 又是 2。若同時令 `current = current->next`，就可能漏掉連續目標。
 
@@ -516,6 +594,19 @@ current = head
 第 3 輪：previous = 3 → 2 → 1，current = null
 ```
 
+```mermaid
+flowchart TB
+    S0[初始<br/>previous = null<br/>current = 1 → 2 → 3]
+    S1[第 1 輪後<br/>previous = 1 → null<br/>current = 2 → 3]
+    S2[第 2 輪後<br/>previous = 2 → 1 → null<br/>current = 3]
+    S3[第 3 輪後<br/>previous = 3 → 2 → 1 → null<br/>current = null]
+    S0 -->|保存 next，反轉 1| S1
+    S1 -->|保存 next，反轉 2| S2
+    S2 -->|保存 next，反轉 3| S3
+```
+
+這張狀態圖著重每輪的區段變化。每次轉移都將未處理 Suffix 的第一個 Node 移到已反轉 Prefix 前方。
+
 #### 常見錯誤
 
 - 未先保存 `current->next`，導致剩餘 List 遺失。
@@ -534,6 +625,27 @@ a：1 → 4 → 7
 b：2 → 3 → 8
 結果：1 → 2 → 3 → 4 → 7 → 8
 ```
+
+```mermaid
+flowchart LR
+    subgraph InputA[List a]
+        A1[1] --> A4[4] --> A7[7]
+    end
+    subgraph InputB[List b]
+        B2[2] --> B3[3] --> B8[8]
+    end
+```
+
+合併過程中，`tail` 永遠指向已完成結果的最後一個 Node，而 `a` 與 `b` 指向兩條尚未處理 Suffix 的第一個 Node：
+
+```mermaid
+flowchart LR
+    D[Dummy] --> R1[1] --> R2[2] --> T[3<br/>tail]
+    T -. 下一個選擇 .-> A[4<br/>a]
+    T -. 或 .-> B[8<br/>b]
+```
+
+實際每輪只會選擇 `a` 或 `b` 中 Value 較小的 Node 接到 `tail` 後方。
 
 #### Precondition
 
@@ -670,6 +782,24 @@ ListNode* middleNode(ListNode* head)
 1 → 2 → 3 → 4
 ```
 
+```mermaid
+flowchart LR
+    N1[1] --> N2[2] --> N3[3] --> N4[4] --> Z[nullptr]
+    S[slow] -.-> N1
+    F[fast] -.-> N1
+```
+
+每輪 Slow 前進一步，Fast 前進兩步：
+
+```mermaid
+flowchart LR
+    N1[1] --> N2[2] --> N3[3] --> N4[4] --> Z[nullptr]
+    S[slow] -.-> N3
+    F[fast] -.-> Z
+```
+
+上述停止條件下，偶數長度會回傳右中點 3。若要求左中點，必須修改停止條件或初始位置。
+
 中間有 2 與 3。上述版本回傳右中點 3。
 
 若題目要求左中點 2，初值或停止條件需要調整。不能只寫「找中點」而不定義偶數長度答案。
@@ -701,6 +831,27 @@ C++ 的 `&&` 由左至右進行 Short-circuit。若第一個條件為 false，�
         ↑       ↓
         └───────┘
 ```
+
+```mermaid
+flowchart LR
+    N1[Node 1] --> N2[Node 2]
+    N2 --> N3[Node 3]
+    N3 --> N4[Node 4]
+    N4 --> N2
+```
+
+進入 Cycle 後，可把 Slow 與 Fast 的位置看成在有限環上移動：
+
+```mermaid
+stateDiagram-v2
+    [*] --> 進入Cycle
+    進入Cycle --> 相對距離減少: Fast 每輪比 Slow 多走 1 步
+    相對距離減少 --> 相對距離減少: 尚未重合
+    相對距離減少 --> 同一Node: 相對距離為 0
+    同一Node --> [*]
+```
+
+這裡的「同一 Node」是 Pointer Identity 相同，不是兩個 Node 的 Value 相同。
 
 #### C++ 解法
 
@@ -892,6 +1043,21 @@ Pointer Bug 通常能縮小到很短的 List：
 - Cycle 長度 1 或 2。
 
 短 List 可以完整畫出每輪鏈結，通常比大型輸入更容易定位。
+
+```mermaid
+flowchart TD
+    A[取得失敗案例] --> B[為每個 Node 編號]
+    B --> C[記錄每輪 Pointer Identity]
+    C --> D[畫出改寫前鏈結]
+    D --> E[執行一次 next 更新]
+    E --> F{Invariant 是否仍成立}
+    F -->|是| G[進入下一輪]
+    G --> C
+    F -->|否| H[保留第一個錯誤狀態]
+    H --> I[縮小成更短 List]
+```
+
+這個流程把 Debug 重點放在第一個錯誤鏈結，而不是最後才觀察輸出。
 
 ### 7.12 C 語言中的 Linked List
 
