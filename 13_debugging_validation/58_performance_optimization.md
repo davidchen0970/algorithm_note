@@ -1,88 +1,165 @@
-# 第 58 章　效能分析與最佳化
+## 第 58 章　效能分析與最佳化
 
-> 狀態：第一版草稿。目標是先建立可閱讀、可擴寫的章節骨架。
+### 適用範圍
 
-## 本章目標
+本章介紹如何以量測為基礎改善程式效能，包括理論複雜度、實際時間、Constant Factor、Cache Locality、Allocation、Recursion Cost、時間與空間取捨，以及 Bottleneck 定位。
 
-讀完本章後，你應能：
+### 58.1 先量測再改善
 
-- [ ] 能用自己的話說明「先量測再改善」
-- [ ] 能用自己的話說明「理論複雜度與實際時間」
-- [ ] 能用自己的話說明「Constant Factor」
-- [ ] 能用自己的話說明「Cache Locality」
+最佳化流程應從可重現的 Baseline 開始：
 
-## 1. 核心概念
-
-- 先量測再改善
-- 理論複雜度與實際時間
-- Constant Factor
-- Cache Locality
-- Allocation 與 Recursion Cost
-- 空間與時間取捨
-- 尋找 Bottleneck
-
-## 2. 解題時怎麼判斷
-
-1. 先寫清楚輸入、輸出與限制。
-2. 建立最小案例，確認名詞與邊界定義。
-3. 先提出容易驗證的基礎解法。
-4. 找出重複工作、可利用的順序或狀態。
-5. 寫下時間與空間複雜度，再決定是否需要改善。
-
-## 3. C++ 起始範例
-
-```cpp
-#include <iostream>
-#include <vector>
-using namespace std;
-
-int main() {
-    // 先用小型輸入確認假設，再逐步補上演算法。
-    vector<int> data{3, 1, 4, 1, 5};
-    for (int value : data) {
-        cout << value << ' ';
-    }
-    cout << '\n';
-}
+```mermaid
+flowchart LR
+    A[定義 Workload] --> B[量測 Baseline]
+    B --> C[定位 Bottleneck]
+    C --> D[一次修改一項]
+    D --> E[重新量測]
+    E --> F{結果改善且正確嗎}
+    F -->|是| G[保留修改]
+    F -->|否| H[還原或重新分析]
 ```
 
-這段程式只作為章節共用的編譯起點。正式擴寫時，應替換成能呈現本章核心概念的完整範例，並補上輸入、輸出與逐步追蹤。
+量測時記錄輸入規模、資料分布、編譯設定、執行環境、重複次數與統計方式。單次執行容易受到暖機、排程與背景工作影響。
 
-## 4. 容易混淆的地方
+### 58.2 理論複雜度與實際時間
 
-- 不要只憑題目關鍵字選演算法，必須確認成立條件。
-- 對索引、空集合、重複值、負數與極端值另行測試。
-- 複雜度要依實際走訪次數與資料結構成本計算。
-- 若使用遞迴或額外容器，記得列入空間成本。
+Big-O 描述輸入成長時的主要趨勢，不直接等於秒數。兩個 O(n) 解法可能因記憶體配置、分支、資料布局與常數工作量而有明顯差異。
 
-## 5. 建議測試
+```mermaid
+flowchart TD
+    A[效能] --> B[漸進複雜度]
+    A --> C[Constant Factor]
+    A --> D[Memory Access]
+    A --> E[Allocation 與系統成本]
+```
 
-- 空輸入或最小合法輸入
-- 單一元素
-- 全部相同
-- 已排序與反向排序
-- 含負數、零與最大值
-- 能迫使演算法走到最差路徑的案例
+先避免不可接受的複雜度，再針對實際 Bottleneck 調整常數成本。
 
-## 6. 練習題方向
+### 58.3 Benchmark 基本原則
 
-1. 寫一個最直接的版本，標記每個步驟的成本。
-2. 建立一個會讓直覺解法失敗的反例。
-3. 用 5 至 10 筆資料手動追蹤狀態。
-4. 比較兩種解法的時間、空間與可讀性。
+- 使用足以超過計時器雜訊的 Workload。
+- 重複執行並觀察 Median、分布或穩定區間。
+- 避免把輸入生成與輸出列印混入核心計時，除非它們就是需求。
+- 確保結果被使用，避免編譯器移除無效工作。
+- 比較版本必須產生相同 Postcondition。
 
-## 7. 完成前自我檢查
+```cpp
+const auto begin = std::chrono::steady_clock::now();
+auto result = solve(input);
+const auto end = std::chrono::steady_clock::now();
+consume(result);
+```
 
-- [ ] 我能說明演算法成立的前提。
-- [ ] 我能解釋每個主要狀態或資料結構的用途。
-- [ ] 我能列出時間與空間複雜度。
-- [ ] 我測過邊界案例與反例。
-- [ ] 我能在不看筆記的情況下重寫核心流程。
+Microbenchmark 無法完全代表正式系統，仍需以實際 Workload 驗證。
 
-## 待補內容
+### 58.4 Constant Factor
 
-- [ ] 完整概念說明
-- [ ] 至少兩個逐步範例
-- [ ] 一份可直接編譯的 C++ 完整程式
-- [ ] 常見錯誤程式與修正方式
-- [ ] 基礎、變化與綜合練習各一題
+常見來源：
+
+- 重複 Hash、比較或型別轉換。
+- 不必要的資料複製。
+- 迴圈內配置與釋放。
+- 虛擬呼叫或昂貴抽象。
+- Debug Logging 與 I/O。
+
+不要在尚未定位 Bottleneck 時，為微小常數犧牲可讀性與正確性。
+
+### 58.5 Cache Locality
+
+連續記憶體通常較容易有效利用 Cache。Array 或 `std::vector` 的順序走訪，常比散布配置的 Node 結構更具 Locality。
+
+```mermaid
+flowchart LR
+    A[連續 Array] --> B[同一 Cache Line 多個元素]
+    C[分散 Node] --> D[較多 Pointer Chasing 與 Cache Miss]
+```
+
+資料結構選擇仍要符合主要操作。不能只因 Locality 就把需要頻繁局部鏈結修改的需求全部改成 Array。
+
+### 58.6 Allocation 與 Recursion Cost
+
+改善方向：
+
+- 已知規模時使用 `reserve`。
+- 重複使用 Buffer。
+- 避免在內層迴圈反覆建立大型容器。
+- 評估 Object Pool 是否真的必要。
+- 深遞迴需考慮 Stack Overflow 與 Call Overhead。
+
+Recursive 與 Iterative 誰較快不能只靠推測，應以同等正確版本量測。
+
+### 58.7 時間與空間取捨
+
+```mermaid
+flowchart TD
+    A[改善時間] --> B[預處理]
+    A --> C[Memoization]
+    A --> D[額外 Index 或 Cache]
+    B --> E[增加記憶體]
+    C --> E
+    D --> E
+```
+
+Prefix Sum、Hash Table、DP Memo 都是以空間換取時間。需同時評估峰值記憶體、資料生命週期與 Cache 影響。
+
+### 58.8 尋找 Bottleneck
+
+從整體時間占比最大的路徑開始，而不是最顯眼的函式。
+
+```text
+總改善上限受未改善部分限制
+```
+
+若核心函式只占總時間 5%，即使變快 10 倍，整體改善仍有限。Profiler、計時區段、Allocation 統計與硬體 Counter 可提供不同層次資訊。
+
+### 58.9 演算法層級改善
+
+優先檢查：
+
+- O(n²) 是否可透過 Hash、排序或 Two Pointers 降低。
+- 重複區間計算是否可用 Prefix。
+- 重複 State 是否可 Memoize。
+- 反覆找極值是否可用 Heap 或 Deque。
+- 資料是否可批次處理。
+
+演算法階數改善通常比微調單行程式更具影響。
+
+### 58.10 正確性與 Regression
+
+每次最佳化後都應：
+
+- 執行既有 Unit Test。
+- 和 Baseline 或 Brute Force 對拍。
+- 測試邊界及最差資料分布。
+- 檢查 Overflow、Iterator Invalid、Race 與 Ownership。
+- 保存效能 Regression Benchmark。
+
+### 58.11 常見問題與判讀
+
+| 現象 | 可能原因 | 檢查方向 |
+|---|---|---|
+| Benchmark 波動很大 | Workload 太短或環境雜訊 | 增加執行時間與重複次數 |
+| Microbenchmark 快、正式系統沒改善 | Bottleneck 不在該函式 | 看 End-to-end Profile |
+| 空間改善反而變慢 | Cache 或額外計算增加 | 同時量測時間與記憶體 |
+| `reserve` 後仍 Rehash | 預估不足 | 檢查實際元素數與 Load Factor |
+| 最佳化後答案偶爾錯 | 未保留原 Invariant | 對拍與 Sanitizer |
+| 只降低常數仍超時 | 複雜度階數不符限制 | 重新分析演算法 |
+
+### 58.12 本章檢查表
+
+- 我有可重現的 Baseline 與 Workload。
+- 我先定位 Bottleneck，再修改程式。
+- 我能區分 Big-O、Constant Factor 與 Memory Behavior。
+- 我會控制 Benchmark 的編譯與輸入條件。
+- 我知道 Cache Locality、Allocation 與 Recursion 的成本來源。
+- 我會同時評估時間、空間與正確性。
+- 我以 Regression Test 與 Benchmark 驗證修改。
+
+### 58.13 本章重點
+
+- 效能改善應從量測、定位 Bottleneck、單一修改與重新量測形成閉環。
+- 理論複雜度決定成長趨勢，Constant Factor 與 Memory Behavior 影響實際時間。
+- 連續資料通常具有較好的 Cache Locality，但資料結構仍應符合操作需求。
+- 預配置、Buffer 重用與減少內層 Allocation 可降低實際成本。
+- 算法層級改善通常比微調單行程式更重要。
+- 最佳化不能犧牲 Postcondition、邊界安全與可維護性。
