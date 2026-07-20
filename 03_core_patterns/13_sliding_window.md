@@ -61,7 +61,7 @@ flowchart TD
 - [13.9 完整案例：最長無重複 Byte Substring](#139-完整案例最長無重複-byte-substring)
 - [13.10 Frequency、Distinct Count 與其他 State](#1310-frequencydistinct-count-與其他-state)
 - [13.11 含負數時為何普通 Sum Window 可能失效](#1311-含負數時為何普通-sum-window-可能失效)
-- [13.12 Sliding Window 與其他方法](#1312-sliding-window-與其他方法)
+- [13.12 Sliding Window、Two Pointers 與其他方法](#1312-sliding-windowtwo-pointers-與其他方法)
 - [13.13 複雜度與終止性](#1313-複雜度與終止性)
 - [13.14 系統化 Debug](#1314-系統化-debug)
 - [13.15 C 語言中的固定長度 Window](#1315-c-語言中的固定長度-window)
@@ -69,6 +69,22 @@ flowchart TD
 - [13.17 常見問題與判讀](#1317-常見問題與判讀)
 - [13.18 本章檢查表](#1318-本章檢查表)
 - [13.19 本章重點](#1319-本章重點)
+
+### 13.0 Sliding Window 跟 Two Pointer 的關係
+
+最簡單的分類是：
+
+```
+Two Pointers
+├── 相向指標
+├── 快慢指標
+├── 讀寫指標
+├── 兩序列同步指標
+└── 同方向區間指標
+    └── Sliding Window
+```
+
+Sliding Window 通常可以視為 Two Pointers 的一個子類，但 Two Pointers 不一定是 Sliding Window。
 
 ### 13.1 Sliding Window 到底維護什麼
 
@@ -705,37 +721,212 @@ target = 5
 - Frequency 或 Distinct 條件不一定受數值正負影響。
 - 失效的是依賴 Sum 單調性的特定可變窗口推理。
 
-### 13.12 Sliding Window 與其他方法
+### 13.12 Sliding Window、Two Pointers 與其他方法
 
-#### Sliding Window 與 Two Pointers
+#### 先建立分類關係
 
-Sliding Window 是同方向 Two Pointers 的常見子類，但它特別維護連續區間的 State 與 Validity。
+Sliding Window 與 Two Pointers 不是兩個完全互斥的演算法名稱。
+
+較容易理解的分類方式是：
+
+```text
+Two Pointers
+├── 相向指標
+├── 快慢指標
+├── 讀寫指標
+├── 兩序列同步指標
+└── 同方向區間指標
+    └── Sliding Window
+```
+
+也就是說，Sliding Window 通常可以視為 Two Pointers 的一個子類。它同樣使用兩個邊界，但額外強調：
+
+- `left` 與 `right` 夾住一段連續區間。
+- 需要維護 Window 內部的摘要 State。
+- 元素進入與離開時要更新 State。
+- Window 有明確的 Validity 或 Requirement。
+- Expand、Shrink 與答案更新時機構成主要流程。
+
+一般 Two Pointers 則是更大的概念。兩個 Pointer 不一定代表一個需要維護內容的 Window，也不一定同方向移動。
 
 ```mermaid
 flowchart TD
-    A["Two Pointers"] --> B{"是否維護連續區間"}
-    B -->|否| C["相向指標、讀寫指標、快慢指標"]
-    B -->|是| D{"是否維護 Window State 與 Validity"}
-    D -->|是| E["Sliding Window"]
-    D -->|否| F["一般區間邊界"]
+    A["Two Pointers"] --> B["相向：Two Sum on Sorted Array"]
+    A --> C["快慢：Cycle Detection"]
+    A --> D["讀寫：Remove Duplicates"]
+    A --> E["兩序列：Merge"]
+    A --> F["同方向區間"]
+    F --> G["維護 State、Validity、Enter / Leave"]
+    G --> H["Sliding Window"]
 ```
 
-一般 Two Pointers 常著重候選排除、原地整理或兩序列同步走訪；Sliding Window 則著重：
+#### 核心差異
 
-- 区間內容。
-- Enter 與 Leave。
-- Validity。
-- Expand 與 Shrink。
+| 判斷面向 | 一般 Two Pointers | Sliding Window |
+|---|---|---|
+| 概念範圍 | 較廣 | 通常是其中一類 |
+| Pointer 方向 | 可相向、同向、不同速度或分屬兩序列 | 通常同方向向右移動 |
+| 是否代表連續區間 | 不一定 | 通常是連續 Subarray / Substring |
+| 是否維護區間 State | 不一定 | 通常需要 Sum、Frequency、Distinct 等 State |
+| 核心動作 | 排除候選、比較、分割、覆寫、同步走訪 | Enter、Leave、Expand、Shrink |
+| 移動依據 | 比較結果、排序性、速度差、讀寫位置 | Window 長度、Validity、Requirement |
+| 常見證明 | 被排除候選不可能成為答案 | `left` 前進後不必回頭，且不漏合法 Window |
+| 常見案例 | Sorted Two Sum、Container、Cycle、Remove Duplicates、Merge | Fixed Window Sum、Longest Unique Substring、Minimum Valid Window |
+
+這張表不是用來判斷名稱誰比較正確，而是協助你知道程式目前需要證明什麼、維護什麼。
+
+#### 例一：相向 Two Pointers，不是 Sliding Window
+
+在排序 Array 中尋找兩數和：
+
+```cpp
+#include <utility>
+#include <vector>
+
+std::pair<int, int> twoSumSorted(
+    const std::vector<int>& nums,
+    int target) {
+
+    int left = 0;
+    int right = static_cast<int>(nums.size()) - 1;
+
+    while (left < right) {
+        const long long sum =
+            static_cast<long long>(nums[left])
+            + nums[right];
+
+        if (sum == target) {
+            return {left, right};
+        }
+
+        if (sum < target) {
+            ++left;
+        } else {
+            --right;
+        }
+    }
+
+    return {-1, -1};
+}
+```
+
+這裡 `left` 與 `right` 的確夾住一段範圍，但程式沒有維護該範圍內所有元素的 Sum、Frequency 或 Validity。Pointer 的移動是在利用排序性排除不可能配對，因此較適合歸類為相向 Two Pointers。
+
+證明重點是：
+
+- 目前 Sum 太小時，固定 `left` 搭配更小的右值也不可能達到 Target，因此可以移動 `left`。
+- 目前 Sum 太大時，固定 `right` 搭配更大的左值也不可能降低到 Target，因此可以移動 `right`。
+
+#### 例二：讀寫 Two Pointers，不是 Sliding Window
+
+原地移除排序 Array 的重複值：
+
+```cpp
+#include <vector>
+
+int removeDuplicates(std::vector<int>& nums) {
+    if (nums.empty()) {
+        return 0;
+    }
+
+    int write = 1;
+
+    for (int read = 1;
+         read < static_cast<int>(nums.size());
+         ++read) {
+
+        if (nums[read] != nums[write - 1]) {
+            nums[write] = nums[read];
+            ++write;
+        }
+    }
+
+    return write;
+}
+```
+
+`read` 用來掃描輸入，`write` 指向下一個輸出位置。兩者不是 Window 左右邊界，也沒有 Shrink 與 Leave，因此屬於讀寫 Two Pointers。
+
+#### 例三：Sliding Window
+
+最長無重複 Substring：
+
+```text
+left 與 right 夾住目前連續 Substring
+Frequency 描述 Window 內各 Byte 次數
+right 前進時 Enter
+重複時 left 前進並 Leave
+恢復合法後更新最大長度
+```
+
+它符合 Sliding Window 的完整模型：Boundary、State、Enter / Leave、Validity、Expand / Shrink 與 Answer Timing。
+
+#### 快速判斷問題
+
+看到兩個 Pointer 時，可以依序問：
+
+1. 兩個 Pointer 是否是某段連續候選區間的左右邊界？
+2. 答案是否與這段區間內的整體內容有關？
+3. 是否需要在右端加入元素、左端移除元素？
+4. 是否維護 Sum、Frequency、Distinct、Invalid Count 等 State？
+5. 是否依窗口合法性決定 Shrink？
+
+若多數答案為「是」，通常是 Sliding Window。
+
+若主要行為是以下之一，通常先視為一般 Two Pointers：
+
+- 從兩端相向排除候選。
+- 一快一慢偵測 Cycle 或找中點。
+- 一個讀、一個寫，進行原地整理。
+- 分別走訪兩個排序序列。
+- 依比較結果選擇移動其中一個 Pointer。
+
+#### 容易混淆的邊界案例
+
+有些解法可同時稱為「同方向 Two Pointers」與「Sliding Window」。例如最長無重複 Substring，兩種稱呼都不算錯。若要精確描述，建議說：
+
+```text
+這是一個使用同方向 Two Pointers 實作的可變長度 Sliding Window。
+```
+
+名稱不如以下資訊重要：
+
+- Window State 是什麼。
+- 何時 Expand 與 Shrink。
+- 為什麼 Pointer 不必回頭。
+- 答案何時更新。
 
 #### Sliding Window 與 Prefix Sum
 
-- Sliding Window 適合相鄰窗口可增量更新，而且邊界具有可前進規則的情況。
-- Prefix Sum 適合大量區間 Sum 查詢，或搭配 Hash Map 處理任意前綴關係。
-- 含負數的最短 Sum 至少 Target，常需要 Prefix Sum 加 Monotonic Deque，而不是普通 Sum Window。
+- Sliding Window 適合相鄰區間可用 Enter / Leave 增量更新，而且邊界能單向前進的情況。
+- Prefix Sum 適合快速取得任意固定區間的 Sum，或搭配 Hash Map 處理 Prefix 關係。
+- 若要大量回答不同 `[left, right]` Sum Query，Prefix Sum 通常比逐次移動 Window 更直接。
+- 含負數的「最短 Sum 至少為 Target」通常不能使用普通可變 Sum Window，常見方向是 Prefix Sum 搭配 Monotonic Deque。
 
-#### Sliding Window 與 Binary Search
+#### Sliding Window 與 Binary Search on Answer
 
-若能判斷「是否存在長度為 `k` 的合法窗口」，且這個 Predicate 對 `k` 具有單調性，可以考慮 Binary Search on Answer。此時 Sliding Window 可能只負責驗證固定長度 `k` 是否可行。
+若能判斷：
+
+```text
+是否存在長度為 k 的合法 Window
+```
+
+而 Predicate 對 `k` 具有單調性，就可以 Binary Search 答案長度。Sliding Window 此時可能只負責在 O(n) 時間驗證固定 `k` 是否可行。
+
+#### 方法選擇速查
+
+| 題目特徵 | 優先考慮 |
+|---|---|
+| 排序 Array 中找一對元素 | 相向 Two Pointers |
+| Linked List Cycle 或中點 | 快慢 Two Pointers |
+| 原地移除、分割或壓縮 | 讀寫 Two Pointers |
+| 合併兩個排序序列 | 兩序列 Two Pointers |
+| 固定長度連續區間摘要 | Fixed Sliding Window |
+| 最長合法或最短滿足連續區間 | Variable Sliding Window |
+| 任意區間 Sum Query | Prefix Sum |
+| 含負數且依 Sum 門檻縮放 | Prefix Sum、Deque 或其他模型 |
+
+總而言之，Two Pointers 描述「如何用兩個位置縮小搜尋或同步走訪」；Sliding Window 則更具體地描述「如何用兩個邊界維護一段連續區間及其 State」。
 
 ### 13.13 複雜度與終止性
 
