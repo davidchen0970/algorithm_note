@@ -2,797 +2,799 @@
 
 ### 適用範圍
 
-本章說明 Backtracking，也就是在很多可能選項中，一條一條試出答案的方法。
+Backtracking 適合處理「需要列出、尋找或計算多種選擇結果」的問題，例如 Subset、Combination、Permutation、棋盤配置與路徑搜尋。
 
-很多人第一次看到 Backtracking 會卡在三個地方：
+它的核心不是 Recursion 本身，而是反覆執行三個動作：
 
-- 程式一直呼叫自己，看不出目前走到哪裡。
-- `path.push_back()` 和 `path.pop_back()` 看起來像是先加入答案又刪掉答案。
-- Subset、Combination、Permutation 都像是在列東西，但程式寫法又不一樣。
+```text
+做選擇
+遞迴探索
+撤銷選擇
+```
 
-這些困難通常不是不會寫 C++，而是還沒有把問題整理成「目前選了什麼」、「接下來還能選什麼」以及「什麼時候算是一個答案」。
+每一層遞迴代表 Decision Tree 的一層，`path` 表示目前已做出的選擇。當一個分支探索完成後，必須讓共用狀態回到進入該分支前的內容，才能安全探索下一個分支。
 
-本章會建立一套固定流程：
+本章使用以下固定流程：
 
-- 先確認題目要列出的是哪一種答案。
-- 使用小型資料手動列出答案。
-- 找出每一步可以做哪些選擇。
-- 用 `path` 表示目前已經選到的內容。
-- 用 `startIndex` 或 `used` 表示接下來還能選什麼。
-- 每次選完往下走，回來後還原狀態。
-- 再加入去重與剪枝。
+1. 定義一個答案的完整格式。
+2. 判斷順序是否重要。
+3. 判斷每個候選可使用幾次。
+4. 決定每一層可以選哪些候選。
+5. 定義遞迴函式的 State 與契約。
+6. 定義何時收集答案、何時停止。
+7. 為每個狀態變更安排對應還原。
+8. 再加入去重與安全的 Pruning。
+9. 依搜尋樹與輸出數量分析複雜度。
 
 ```mermaid
 flowchart TD
-    A[拿到列舉問題] --> B[先用小資料手動列答案]
-    B --> C[確認每一層能做哪些選擇]
-    C --> D[把目前已選內容放在 path]
-    D --> E[選一個候選]
-    E --> F[遞迴處理下一層]
-    F --> G[回來後撤銷選擇]
-    G --> H[換下一個候選]
+    A["目前 State"] --> B["枚舉合法候選"]
+    B --> C["做選擇"]
+    C --> D["遞迴探索下一層"]
+    D --> E["撤銷選擇"]
+    E --> B
 ```
-
-Backtracking 的重點不是背模板，而是能說明每一層正在試哪個選擇，以及為什麼回來後要把狀態還原。
 
 ### 適用讀者
 
-- 已經學過 Recursion，但看到 Backtracking 仍然不容易追蹤流程的讀者。
-- 能看懂 `push_back` 和 `pop_back`，但不理解為什麼要成對出現的讀者。
-- 容易混淆 Subset、Combination、Permutation 的讀者。
-- 寫程式時常漏掉 `startIndex`、`used` 或狀態還原的讀者。
-- 想先理解問題，再慢慢寫出 C++ 程式的讀者。
+- 已理解 Recursion，但不容易追蹤 Backtracking 流程的讀者。
+- 不清楚 `push_back` 與 `pop_back` 為何成對出現的讀者。
+- 容易混淆 Subset、Combination 與 Permutation 的讀者。
+- 常漏掉 `startIndex`、`used`、去重或狀態還原的讀者。
+- 想理解 Pruning 何時安全，以及複雜度為何通常很高的讀者。
 
 ### 快速導覽
 
-- [22.1 Backtracking 前到底要分析什麼](#221-backtracking-前到底要分析什麼)：先整理輸入、輸出與選擇空間。
-- [22.2 先不要寫程式：用手列出 Subset](#222-先不要寫程式用手列出-subset)：建立直覺。
-- [22.3 Path 是什麼](#223-path-是什麼)：目前已經選到的內容。
-- [22.4 為什麼需要撤銷選擇](#224-為什麼需要撤銷選擇)：理解 `pop_back` 的用途。
-- [22.5 Decision Tree](#225-decision-tree)：把所有選擇看成一棵樹。
-- [22.6 Subset](#226-subset)：每個中間狀態都是答案。
-- [22.7 Combination](#227-combination)：選固定數量，順序不重要。
-- [22.8 Permutation](#228-permutation)：順序重要，需記錄哪些元素已使用。
-- [22.9 startIndex 與 used 的差異](#229-startindex-與-used-的差異)：判斷要用哪一種狀態。
-- [22.10 去除重複](#2210-去除重複)：避免產生相同答案。
-- [22.11 Constraint 與 Pruning](#2211-constraint-與-pruning)：提前停止不可能成功的分支。
-- [22.12 常見問題與判讀](#2212-常見問題與判讀)：整理新手常見錯誤。
-- [22.13 本章檢查表](#2213-本章檢查表)：確認是否掌握核心概念。
-- [22.14 本章重點](#2214-本章重點)：回顧本章核心。
+- [22.1 Backtracking 前要分析什麼](#221-backtracking-前要分析什麼)
+- [22.2 Decision Tree 與遞迴契約](#222-decision-tree-與遞迴契約)
+- [22.3 Path 與狀態還原](#223-path-與狀態還原)
+- [22.4 完整案例：Subset](#224-完整案例subset)
+- [22.5 完整案例：Combination](#225-完整案例combination)
+- [22.6 完整案例：Permutation](#226-完整案例permutation)
+- [22.7 startIndex、used 與可重複選取](#227-startindexused-與可重複選取)
+- [22.8 去除重複答案](#228-去除重複答案)
+- [22.9 Pruning](#229-pruning)
+- [22.10 Backtracking 與 DFS、Brute Force](#2210-backtracking-與-dfsbrute-force)
+- [22.11 複雜度與輸出成本](#2211-複雜度與輸出成本)
+- [22.12 Iterative State 與例外安全](#2212-iterative-state-與例外安全)
+- [22.13 系統化 Debug](#2213-系統化-debug)
+- [22.14 常見問題與判讀](#2214-常見問題與判讀)
+- [22.15 本章檢查表](#2215-本章檢查表)
+- [22.16 本章重點](#2216-本章重點)
 
-### 22.1 Backtracking 前到底要分析什麼
+### 22.1 Backtracking 前要分析什麼
 
-假設題目如下：
+拿到列舉問題時，先回答：
 
-給定 `[1, 2, 3]`，列出所有 Subset。
+| 分析項目 | 要回答的問題 |
+|---|---|
+| 答案格式 | 一個答案由哪些元素或動作組成？ |
+| 答案長度 | 固定、可變，還是直到抵達終點？ |
+| 順序 | `[1, 2]` 與 `[2, 1]` 是否不同？ |
+| 使用次數 | 每個候選最多一次、可重複，還是有上限？ |
+| 候選集合 | 下一層可以從哪些項目中選？ |
+| State | 除了 `path`，還要保存位置、總和、棋盤或 `used` 嗎？ |
+| 收集條件 | 中間 State 是答案，還是只有完成 State 才是答案？ |
+| 去重 | 輸入是否有重複值？相同值如何避免重複分支？ |
+| Pruning | 哪些分支可證明不可能產生答案？ |
 
-很多人看到後會立刻想：
+以 `[1, 2, 3]` 的 Subset 為例：
 
-我要用幾層 for？
-我要怎麼遞迴？
-`path` 是什麼？
-`startIndex` 又是什麼？
+- 長度可為 0 到 3。
+- 順序不重要。
+- 每個 Index 最多使用一次。
+- 每個中間 `path` 都是答案。
+- 選取 Index `i` 後，下一層從 `i + 1` 開始。
 
-但這些不是第一個問題。
+#### 先不要急著寫遞迴
 
-第一步應該先把題目整理成幾個明確欄位：
-
-<table>
-<tr><th>分析項目</th><th>本題內容</th></tr>
-<tr><td>輸入</td><td>一組整數 `[1, 2, 3]`</td></tr>
-<tr><td>輸出</td><td>所有 Subset</td></tr>
-<tr><td>答案是否需要固定長度</td><td>不需要，長度可以是 0 到 n</td></tr>
-<tr><td>每個元素能用幾次</td><td>最多一次</td></tr>
-<tr><td>順序是否重要</td><td>不重要，`[1, 2]` 和 `[2, 1]` 視為同一組</td></tr>
-<tr><td>是否有重複值</td><td>本例沒有</td></tr>
-<tr><td>目前選到的內容</td><td>使用 `path` 保存</td></tr>
-<tr><td>下一層從哪裡開始選</td><td>使用 `startIndex` 保存</td></tr>
-</table>
-
-這張表會直接影響程式：
-
-- 因為順序不重要，所以不需要產生 `[2, 1]` 這種和 `[1, 2]` 重複的結果。
-- 因為每個元素最多用一次，選了 index `i` 之後，下一層應該從 `i + 1` 開始。
-- 因為 Subset 長度不固定，所以每個中間 `path` 都是一個答案。
-
-Backtracking 不是一開始就寫模板，而是先釐清「目前答案長什麼樣子」和「下一步還能選什麼」。
-
-### 22.2 先不要寫程式：用手列出 Subset
-
-對 `[1, 2, 3]` 來說，Subset 是從原資料中任意選一些元素。
-
-可以選 0 個：
+以 `[1, 2, 3]` 的 Subset 為例，先用手列出答案：
 
 ```text
-[]
+選 0 個：[]
+選 1 個：[1]、[2]、[3]
+選 2 個：[1, 2]、[1, 3]、[2, 3]
+選 3 個：[1, 2, 3]
 ```
 
-可以選 1 個：
+這一步可以先確認三件事：
+
+1. 空集合 `[]` 是答案。
+2. `[1, 2]` 與 `[2, 1]` 視為同一個 Subset，因此不需要產生兩次。
+3. 答案長度不固定，所以不能只在選滿全部元素時收集答案。
+
+接著再問「人是怎麼列出這些答案的」：
 
 ```text
-[1]
-[2]
-[3]
+手上先是 []
+拿 1，變成 [1]
+再拿 2，變成 [1, 2]
+再拿 3，變成 [1, 2, 3]
+
+後面沒有東西可拿了：
+放回 3，回到 [1, 2]
+放回 2，回到 [1]
+改拿 3，變成 [1, 3]
 ```
 
-可以選 2 個：
+這段過程就是 Backtracking。程式中的 `path` 相當於手上的牌，`push_back()` 是拿牌，`pop_back()` 是把本輪拿的牌放回去。
+
+#### 為什麼順序不重要時只往後選
+
+產生 `[1, 2]` 後，如果下一個 Root 分支從 2 開始又允許回頭拿 1，就會再產生 `[2, 1]`。對 Subset 與 Combination 而言，這兩個答案內容相同。
+
+因此選擇 Index `i` 後，下一層只考慮 `i + 1` 之後的候選。這不是為了讓程式比較短，而是在搜尋樹中直接移除代表相同答案的排列分支。
+
+### 22.2 Decision Tree 與遞迴契約
+
+Backtracking 可以看成走訪隱含的 Decision Tree：
+
+- Node 是目前 State。
+- Edge 是一個選擇。
+- Root 是尚未選擇任何內容的初始 State。
+- Leaf 可能是完整答案、失敗狀態或沒有候選的狀態。
+
+遞迴函式應有明確契約。例如 Subset：
 
 ```text
-[1, 2]
-[1, 3]
-[2, 3]
+backtrack(startIndex)
+列出所有以目前 path 為前綴，
+而且後續只使用 startIndex 之後元素的 Subset。
 ```
 
-可以選 3 個：
+函式進入與離開時還應滿足：
 
 ```text
-[1, 2, 3]
+離開 backtrack(...) 時，
+共享的 path 必須和進入函式時完全相同。
 ```
 
-所以全部答案是：
+這是 Backtracking 最重要的 State Invariant。
 
-```text
-[]
-[1]
-[1, 2]
-[1, 2, 3]
-[1, 3]
-[2]
-[2, 3]
-[3]
-```
+### 22.3 Path 與狀態還原
 
-這個順序不是唯一的。Backtracking 常見的輸出順序是沿著一條路先走到底，再回來換下一條路。
-
-#### 人類列答案時其實也在 Backtracking
-
-可以把 `[1, 2, 3]` 想成桌上的三張牌。
-
-一開始手上沒有牌：
-
-```text
-path = []
-```
-
-先拿 1：
-
-```text
-path = [1]
-```
-
-再拿 2：
-
-```text
-path = [1, 2]
-```
-
-再拿 3：
-
-```text
-path = [1, 2, 3]
-```
-
-這條路走完後，回到上一層，把 3 放回去：
-
-```text
-path = [1, 2]
-```
-
-再回到上一層，把 2 放回去：
-
-```text
-path = [1]
-```
-
-這時才能改拿 3：
-
-```text
-path = [1, 3]
-```
-
-這就是 Backtracking 的核心：
-
-```text
-拿一張牌
-往下試
-試完放回去
-改拿下一張牌
-```
-
-### 22.3 Path 是什麼
-
-`path` 表示目前這條路上已經選了哪些元素。
-
-它不是最後答案本身，而是「目前正在組合中的答案」。
-
-例如走到不同位置時：
-
-<table>
-<tr><th>目前狀態</th><th>path 內容</th><th>意思</th></tr>
-<tr><td>一開始</td><td>`[]`</td><td>什麼都還沒選</td></tr>
-<tr><td>選了 1</td><td>`[1]`</td><td>目前這條路包含 1</td></tr>
-<tr><td>選了 1 和 2</td><td>`[1, 2]`</td><td>目前這條路包含 1、2</td></tr>
-<tr><td>選了 1、2、3</td><td>`[1, 2, 3]`</td><td>目前這條路包含全部元素</td></tr>
-</table>
-
-在 Subset 題中，每一個 `path` 都是一個合法答案。
-
-因此只要進入一層函式，就可以先把目前 `path` 放入 `result`。
+`path` 表示目前 Decision Tree 路徑上的選擇，不等於所有答案。
 
 ```cpp
-result.push_back(path);
-```
-
-這一行的意思不是「遞迴結束了」，而是：
-
-目前這個選法本身就是一個 Subset，所以先記錄下來。
-
-### 22.4 為什麼需要撤銷選擇
-
-Backtracking 最容易卡住的地方是這三行：
-
-```cpp
-path.push_back(nums[i]);
+path.push_back(candidate);
 backtrack(...);
 path.pop_back();
 ```
 
-可以把它翻成白話：
+可讀成：
 
 ```text
-先把 nums[i] 拿到手上
-接著用目前手上的牌繼續往下找答案
-找完後，把 nums[i] 放回去
+選 candidate
+在此選擇下探索所有後續答案
+取消 candidate
 ```
 
-為什麼要放回去？
-
-因為下一個分支要從同一個起點重新嘗試。如果不放回去，上一個分支留下的元素會影響下一個分支。
-
-#### 錯誤情況
-
-假設目前：
-
-```text
-path = [1]
-```
-
-選 2 後：
-
-```text
-path = [1, 2]
-```
-
-探索完 `[1, 2]` 這條路後，如果沒有把 2 拿掉，接著選 3 時會變成：
-
-```text
-path = [1, 2, 3]
-```
-
-但如果我們原本想走的是 `[1, 3]`，就會出錯。
-
-所以探索完 2 的分支後，要先：
+若還修改其他共享狀態，也要對稱還原：
 
 ```cpp
+used[i] = true;
+path.push_back(nums[i]);
+
+backtrack(...);
+
 path.pop_back();
+used[i] = false;
 ```
 
-讓狀態回到：
+還原順序通常與修改順序相反，較容易核對。
+
+#### Copy State 與 Undo State
+
+另一種寫法是每次建立新副本：
+
+```cpp
+auto nextPath = path;
+nextPath.push_back(candidate);
+backtrack(nextPath, ...);
+```
+
+這能降低共用狀態錯誤，但可能產生較多 Copy。教材與競賽程式常使用「修改後還原」，因為成本較低；選擇哪種方式應考慮可讀性、資料大小與正確性。
+
+#### 用 `[1, 2, 3]` 追蹤 `path`
+
+假設目前正在探索所有以 `[1]` 開頭的 Subset：
+
+| 時間點 | 動作 | `path` | 說明 |
+|---|---|---|---|
+| 進入分支 | 已選 1 | `[1]` | 這是目前共同前綴 |
+| 選擇 2 | `push_back(2)` | `[1, 2]` | 進入「有選 2」的分支 |
+| 選擇 3 | `push_back(3)` | `[1, 2, 3]` | 繼續往下一層 |
+| 返回上一層 | `pop_back()` | `[1, 2]` | 取消本層選的 3 |
+| 返回 `[1]` | `pop_back()` | `[1]` | 取消先前選的 2 |
+| 改選 3 | `push_back(3)` | `[1, 3]` | 探索 `[1, 3]` 分支 |
+
+關鍵不是「把答案刪掉」。`result` 已經保存答案的副本；`pop_back()` 修改的是工作中的 `path`，目的是讓下一個分支從正確的共同前綴開始。
+
+#### 為什麼 `result.push_back(path)` 不會受後續 `pop_back()` 影響
+
+`result.push_back(path)` 會把目前 `path` 的內容複製進 `result`。之後對工作用 `path` 執行 `pop_back()`，不會回頭修改已存入 `result` 的那份 Vector。
+
+可以把兩者分開理解：
 
 ```text
-path = [1]
+path   = 可反覆修改的草稿
+result = 已完成答案的集合
 ```
 
-再去選 3。
+#### 狀態還原不只包含 `path`
 
-```mermaid
-flowchart LR
-    A["path = [1]"] --> B["加入 2，path = [1,2]"]
-    B --> C["探索 [1,2] 分支"]
-    C --> D["移除 2，path 回到 [1]"]
-    D --> E["加入 3，path = [1,3]"]
+如果一個選擇同時修改多個 State，就必須全部還原。例如排列題會修改：
+
+```text
+path
+used[i]
 ```
 
-`push_back` 和 `pop_back` 必須成對出現。前者進入分支，後者離開分支。
+棋盤題可能修改：
 
-### 22.5 Decision Tree
+```text
+board[row][column]
+columnUsed[column]
+diagonalUsed[diagonal]
+```
 
-Backtracking 可以看成走訪一棵 Decision Tree。
+只還原其中一部分，下一個分支仍會讀到上一個分支留下的資料。
 
-每個節點代表一個目前的 `path`。
+### 22.4 完整案例：Subset
 
-每條邊代表「多選一個元素」。
+#### State
 
-以 `[1, 2, 3]` 的 Subset 為例：
+```text
+path = 目前已選元素
+startIndex = 下一層可以開始選取的 Index
+```
+
+每個 `path` 都是合法 Subset，因此進入函式時先收集。
+
+```cpp
+#include <vector>
+
+void collectSubsets(
+    const std::vector<int>& nums,
+    int startIndex,
+    std::vector<int>& path,
+    std::vector<std::vector<int>>& result) {
+
+    result.push_back(path);
+
+    for (int i = startIndex;
+         i < static_cast<int>(nums.size());
+         ++i) {
+
+        path.push_back(nums[i]);
+        collectSubsets(nums, i + 1, path, result);
+        path.pop_back();
+    }
+}
+
+std::vector<std::vector<int>> subsets(
+    const std::vector<int>& nums) {
+
+    std::vector<std::vector<int>> result;
+    std::vector<int> path;
+    collectSubsets(nums, 0, path, result);
+    return result;
+}
+```
+
+#### 為什麼使用 `i + 1`
+
+因為每個 Index 最多使用一次，而且順序不重要。只往後選可以避免同時產生 `[1, 2]` 與 `[2, 1]`。
+
+#### 收集時機
+
+Subset 的答案長度不固定，所以每個 Node 都是答案。這與「到 Leaf 才收集」的寫法不同。
+
+#### Subset 搜尋樹
 
 ```mermaid
 graph TD
     A["[]"] --> B["[1]"]
-    B --> C["[1,2]"]
-    C --> D["[1,2,3]"]
-    B --> E["[1,3]"]
+    B --> C["[1, 2]"]
+    C --> D["[1, 2, 3]"]
+    B --> E["[1, 3]"]
     A --> F["[2]"]
-    F --> G["[2,3]"]
+    F --> G["[2, 3]"]
     A --> H["[3]"]
 ```
 
-這棵樹可以看到幾件事：
+每個 Node 都會收集一次，因此 `n` 個不同元素恰好得到 `2^n` 個 Subset。
 
-- 從 `[]` 可以選 1、2、3。
-- 從 `[1]` 開始，只能繼續選 2 或 3。
-- 從 `[2]` 開始，只能繼續選 3。
-- 每個節點本身都是一個 Subset。
+#### 完整呼叫順序
 
-#### 為什麼不是從 `[1]` 回頭選 1 或 2
-
-因為 Subset 不在乎順序。
-
-如果已經產生 `[1, 2]`，就不需要再產生 `[2, 1]`。
-
-所以選了 index `i` 後，下一層從 `i + 1` 開始即可。
-
-### 22.6 Subset
-
-Subset 的特性是：
-
-- 每個元素可以選，也可以不選。
-- 答案長度不固定。
-- 順序不重要。
-- 每個中間 `path` 都是答案。
-
-#### 程式需要保存什麼
-
-<table>
-<tr><th>資訊</th><th>用途</th></tr>
-<tr><td>`nums`</td><td>原始資料</td></tr>
-<tr><td>`startIndex`</td><td>下一層從哪個位置開始選</td></tr>
-<tr><td>`path`</td><td>目前已選元素</td></tr>
-<tr><td>`result`</td><td>保存所有答案</td></tr>
-</table>
-
-#### C++ Subset 解法
-
-```cpp
-#include <vector>
-
-void backtrackSubsets(
-    const std::vector<int>& nums,
-    int startIndex,
-    std::vector<int>& path,
-    std::vector<std::vector<int>>& result)
-{
-    // Subset 的每個 path 都是答案。
-    result.push_back(path);
-
-    for (int i = startIndex; i < static_cast<int>(nums.size()); ++i)
-    {
-        path.push_back(nums[i]);
-        backtrackSubsets(nums, i + 1, path, result);
-        path.pop_back();
-    }
-}
-
-std::vector<std::vector<int>> subsets(const std::vector<int>& nums)
-{
-    std::vector<std::vector<int>> result;
-    std::vector<int> path;
-
-    backtrackSubsets(nums, 0, path, result);
-    return result;
-}
-```
-
-#### 逐輪執行
-
-輸入：`[1, 2, 3]`
-
-<table>
-<tr><th>步驟</th><th>動作</th><th>startIndex</th><th>path</th><th>是否收集答案</th></tr>
-<tr><td>1</td><td>進入函式</td><td>0</td><td>`[]`</td><td>收集 `[]`</td></tr>
-<tr><td>2</td><td>選 1</td><td>1</td><td>`[1]`</td><td>收集 `[1]`</td></tr>
-<tr><td>3</td><td>選 2</td><td>2</td><td>`[1, 2]`</td><td>收集 `[1, 2]`</td></tr>
-<tr><td>4</td><td>選 3</td><td>3</td><td>`[1, 2, 3]`</td><td>收集 `[1, 2, 3]`</td></tr>
-<tr><td>5</td><td>回來，移除 3</td><td>2</td><td>`[1, 2]`</td><td>否</td></tr>
-<tr><td>6</td><td>回來，移除 2</td><td>1</td><td>`[1]`</td><td>否</td></tr>
-<tr><td>7</td><td>選 3</td><td>3</td><td>`[1, 3]`</td><td>收集 `[1, 3]`</td></tr>
-<tr><td>8</td><td>回來，移除 3</td><td>1</td><td>`[1]`</td><td>否</td></tr>
-<tr><td>9</td><td>回來，移除 1</td><td>0</td><td>`[]`</td><td>否</td></tr>
-<tr><td>10</td><td>選 2</td><td>2</td><td>`[2]`</td><td>收集 `[2]`</td></tr>
-<tr><td>11</td><td>選 3</td><td>3</td><td>`[2, 3]`</td><td>收集 `[2, 3]`</td></tr>
-<tr><td>12</td><td>回來，移除 3</td><td>2</td><td>`[2]`</td><td>否</td></tr>
-<tr><td>13</td><td>回來，移除 2</td><td>0</td><td>`[]`</td><td>否</td></tr>
-<tr><td>14</td><td>選 3</td><td>3</td><td>`[3]`</td><td>收集 `[3]`</td></tr>
-</table>
-
-這張表是理解 Backtracking 的關鍵。程式不是一次生出所有答案，而是沿著樹一條一條走。
-
-### 22.7 Combination
-
-Combination 是從 n 個元素中選 k 個。
-
-例如從 `1, 2, 3, 4` 中選 2 個：
+輸入 `[1, 2, 3]` 時，答案通常依 DFS 順序產生：
 
 ```text
+[]
+[1]
 [1, 2]
+[1, 2, 3]
 [1, 3]
-[1, 4]
+[2]
 [2, 3]
-[2, 4]
-[3, 4]
+[3]
 ```
 
-Combination 與 Subset 很像，都不在乎順序，所以也使用 `startIndex`。
+輸出順序不是 Subset 定義的一部分。若測試只要求答案集合相同，不應假設所有正確解法都會以相同順序輸出。
 
-差異是：
+#### Subset 的正確性思路
 
-- Subset：每個中間 `path` 都是答案。
-- Combination：只有 `path.size() == k` 時才是答案。
+對任一 Subset，把其中元素的 Index 由小到大排列。搜尋過程會依同樣順序選取這些 Index，因此一定能產生該 Subset。另一方面，因為 Index 只會嚴格增加，同一組 Index 不會由另一種順序再次產生，所以不重複。
 
-#### 問題分析表
+### 22.5 完整案例：Combination
 
-<table>
-<tr><th>分析項目</th><th>Combination</th></tr>
-<tr><td>輸入</td><td>n 與 k</td></tr>
-<tr><td>輸出</td><td>從 1 到 n 中選 k 個的所有組合</td></tr>
-<tr><td>答案長度</td><td>固定為 k</td></tr>
-<tr><td>順序是否重要</td><td>不重要</td></tr>
-<tr><td>每個數字能用幾次</td><td>最多一次</td></tr>
-<tr><td>需要的狀態</td><td>`startIndex` 與 `path`</td></tr>
-</table>
+從 `1..n` 中選出恰好 `k` 個數字，順序不重要。
 
-#### C++ Combination 解法
+```text
+path.size() == k
+```
+
+時才形成答案。
 
 ```cpp
 #include <vector>
 
-void backtrackCombinations(
+void collectCombinations(
     int n,
     int k,
     int start,
     std::vector<int>& path,
-    std::vector<std::vector<int>>& result)
-{
-    if (static_cast<int>(path.size()) == k)
-    {
+    std::vector<std::vector<int>>& result) {
+
+    if (static_cast<int>(path.size()) == k) {
         result.push_back(path);
         return;
     }
 
-    for (int value = start; value <= n; ++value)
-    {
+    const int remainingNeeded =
+        k - static_cast<int>(path.size());
+
+    for (int value = start;
+         value <= n - remainingNeeded + 1;
+         ++value) {
+
         path.push_back(value);
-        backtrackCombinations(n, k, value + 1, path, result);
+        collectCombinations(
+            n, k, value + 1, path, result);
         path.pop_back();
     }
 }
 
-std::vector<std::vector<int>> combine(int n, int k)
-{
+std::vector<std::vector<int>> combine(int n, int k) {
+    if (n < 0 || k < 0 || k > n) {
+        return {};
+    }
+
     std::vector<std::vector<int>> result;
     std::vector<int> path;
-
-    backtrackCombinations(n, k, 1, path, result);
+    collectCombinations(n, k, 1, path, result);
     return result;
 }
 ```
 
-#### 為什麼不是每一層都收集答案
+`n - remainingNeeded + 1` 是安全 Pruning：若目前值再大，剩餘數字數量不足以把 `path` 補到長度 `k`。
 
-因為 Combination 題目要求固定選 k 個。
+#### Combination 與 Subset 的收集時機
 
-如果 `k = 2`，那麼：
+兩者搜尋方式相似，但答案條件不同：
 
-```text
-[]       不是答案
-[1]      不是答案
-[1, 2]   是答案
-[1, 2, 3] 不應該出現
-```
+| 題型 | 目前 `path` 何時是答案？ |
+|---|---|
+| Subset | 每次進入函式時都是答案 |
+| Combination | 只有 `path.size() == k` 時 |
 
-所以只有長度剛好等於 k 時才收集。
-
-### 22.8 Permutation
-
-Permutation 是排列。順序重要。
-
-對 `[1, 2, 3]` 來說：
+例如 `k = 2`：
 
 ```text
-[1, 2, 3]
-[1, 3, 2]
-[2, 1, 3]
-[2, 3, 1]
-[3, 1, 2]
-[3, 2, 1]
+[]          尚未選滿，不收集
+[1]         尚未選滿，不收集
+[1, 2]      長度為 2，收集
+[1, 2, 3]   不應繼續產生
 ```
 
-這裡 `[1, 2, 3]` 和 `[2, 1, 3]` 是不同答案。
+因此 Combination 收集答案後立即 `return`，避免再選成長度超過 `k` 的路徑。
 
-因此 Permutation 不能像 Subset 那樣只往後選。因為第一個位置選了 2 之後，第二個位置仍然可以選 1。
+#### 剩餘數量 Pruning 的推導
 
-所以 Permutation 需要另一種狀態：`used`。
-
-#### used 是什麼
-
-`used[i]` 表示 index `i` 的元素目前是否已經在 `path` 裡。
-
-例如：
+假設還需要選 `remainingNeeded` 個數。如果目前從 `value` 開始，包含 `value` 在內到 `n` 共有：
 
 ```text
-nums = [1, 2, 3]
-path = [2]
-used = [false, true, false]
+n - value + 1
 ```
 
-意思是：
+個候選。要有足夠候選完成答案，必須滿足：
 
-- 1 還沒用。
-- 2 已經用在目前 path。
-- 3 還沒用。
+```text
+n - value + 1 >= remainingNeeded
+```
 
-#### C++ Permutation 解法
+整理後得到：
+
+```text
+value <= n - remainingNeeded + 1
+```
+
+這就是 Loop 上界的來源。若一開始不熟悉，可以先寫沒有此 Pruning 的正確版本，再加入並用小型案例核對。
+
+### 22.6 完整案例：Permutation
+
+Permutation 的順序重要。第一個位置選 2 後，第二個位置仍可選 1，因此不能只使用 `startIndex` 往後掃。
+
+需要 `used[i]` 表示該 Index 是否已在目前 `path` 中。
 
 ```cpp
 #include <vector>
 
-void backtrackPermutations(
+void collectPermutations(
     const std::vector<int>& nums,
-    std::vector<int>& path,
     std::vector<bool>& used,
-    std::vector<std::vector<int>>& result)
-{
-    if (path.size() == nums.size())
-    {
+    std::vector<int>& path,
+    std::vector<std::vector<int>>& result) {
+
+    if (path.size() == nums.size()) {
         result.push_back(path);
         return;
     }
 
-    for (int i = 0; i < static_cast<int>(nums.size()); ++i)
-    {
-        if (used[i])
-        {
+    for (int i = 0;
+         i < static_cast<int>(nums.size());
+         ++i) {
+
+        if (used[i]) {
             continue;
         }
 
         used[i] = true;
         path.push_back(nums[i]);
 
-        backtrackPermutations(nums, path, used, result);
+        collectPermutations(nums, used, path, result);
 
         path.pop_back();
         used[i] = false;
     }
 }
 
-std::vector<std::vector<int>> permute(const std::vector<int>& nums)
-{
+std::vector<std::vector<int>> permute(
+    const std::vector<int>& nums) {
+
     std::vector<std::vector<int>> result;
     std::vector<int> path;
     std::vector<bool> used(nums.size(), false);
-
-    backtrackPermutations(nums, path, used, result);
+    collectPermutations(nums, used, path, result);
     return result;
 }
 ```
 
-#### 為什麼 used 也要還原
+`used` 追蹤的是 Index，不是 Value。若輸入含兩個相同值，它們仍是兩個不同 Index，去重需要額外規則。
 
-Permutation 做了兩個狀態改變：
+#### 為什麼 Permutation 不能使用一般 `startIndex`
+
+假設第一個位置選了 2：
+
+```text
+path = [2]
+```
+
+下一個位置仍可能選 1 或 3。如果傳入 `startIndex = i + 1`，Index 0 的 1 會永久被排除，於是 `[2, 1, 3]` 無法產生。
+
+Permutation 的問題不是「接下來只能往後選」，而是「全部元素都可考慮，但目前路徑已使用的 Index 不能再選」。所以使用 `used`。
+
+#### `used` 的生命週期
+
+```text
+used[i] == true
+```
+
+只表示 Index `i` 正在目前這一條遞迴路徑中，不表示它已被所有分支永久使用。
+
+因此：
 
 ```cpp
 used[i] = true;
-path.push_back(nums[i]);
-```
-
-回來後也要做兩個還原：
-
-```cpp
-path.pop_back();
+// 探索所有包含 nums[i] 的後續排列
 used[i] = false;
 ```
 
-若忘記 `used[i] = false`，後面的分支會誤以為這個元素仍然不能使用。
+若忘記恢復 `false`，後續兄弟分支會少掉該元素，Permutation 數量通常小於 `n!`。
 
-```mermaid
-flowchart TD
-    A["選 nums[i]"] --> B["used[i] = true"]
-    B --> C["path 加入 nums[i]"]
-    C --> D["遞迴探索"]
-    D --> E["path 移除 nums[i]"]
-    E --> F["used[i] = false"]
-```
+### 22.7 `startIndex`、`used` 與可重複選取
 
-### 22.9 startIndex 與 used 的差異
+| 題型 | 順序重要 | 每個候選使用次數 | 常見 State |
+|---|---:|---:|---|
+| Subset | 否 | 最多一次 | `startIndex`，下一層 `i + 1` |
+| Combination | 否 | 最多一次 | `startIndex`，下一層 `value + 1` |
+| Combination Sum | 否 | 可重複 | `startIndex`，下一層仍可從 `i` 開始 |
+| Permutation | 是 | 最多一次 | `used` |
 
-Backtracking 題目常見困惑是：到底要用 `startIndex` 還是 `used`？
+可重複選取時，若選了候選 `i` 後仍允許再次使用它，下一層可以傳入 `i`，而不是 `i + 1`。但若候選包含 0 或負數，遞迴可能不收斂，必須由規格保證進展，或增加使用上限與其他停止條件。
 
-可以先看「順序是否重要」。
+#### 可重複選取的例子
 
-<table>
-<tr><th>題型</th><th>順序是否重要</th><th>是否回頭選前面的元素</th><th>常用狀態</th></tr>
-<tr><td>Subset</td><td>不重要</td><td>不需要</td><td>`startIndex`</td></tr>
-<tr><td>Combination</td><td>不重要</td><td>不需要</td><td>`startIndex`</td></tr>
-<tr><td>Permutation</td><td>重要</td><td>需要，但不能選已用元素</td><td>`used`</td></tr>
-</table>
+假設候選為 `[2, 3, 6, 7]`，Target 為 7，而且每個正整數可以重複使用。
 
-#### startIndex 的直覺
-
-`startIndex` 的意思是：
-
-```text
-前面的元素已經處理過了，下一層只從後面繼續選。
-```
-
-它用來避免產生同一組內容的不同順序。
-
-例如 Combination 中：
-
-```text
-[1, 2]
-[2, 1]
-```
-
-兩者內容相同，所以只要保留 `[1, 2]`。
-
-#### used 的直覺
-
-`used` 的意思是：
-
-```text
-每一層都可以從全部元素中選，但目前 path 裡已經用過的不能再選。
-```
-
-它用在順序重要的排列問題。
-
-### 22.10 去除重複
-
-如果輸入有重複值，就可能產生重複答案。
-
-例如：
-
-```text
-[1, 1, 2]
-```
-
-兩個 1 在位置上不同，但數值相同。若不處理，Permutation 可能產生看起來完全一樣的答案。
-
-常見處理方式是：
-
-1. 先排序，讓相同值靠在一起。
-2. 在同一層中，若前一個相同值還沒被使用，就跳過目前這個值。
+選擇 2 後，下一層仍可選 2，因此傳入目前的 `i`：
 
 ```cpp
-if (i > 0 && nums[i] == nums[i - 1] && !used[i - 1])
-{
+path.push_back(candidates[i]);
+backtrack(i, remaining - candidates[i]);
+path.pop_back();
+```
+
+若改傳 `i + 1`，就只能使用每個候選一次，`[2, 2, 3]` 會被漏掉。
+
+這裡需要正數 Precondition。若候選為 0，選取後 `remaining` 不變；若候選為負數，`remaining` 可能遠離終止條件，兩者都可能造成無限遞迴。
+
+### 22.8 去除重複答案
+
+輸入含重複值時，必須區分：
+
+- 同一路徑是否可使用兩個相同值。
+- 同一層是否應由相同值開出多個等價分支。
+
+常見流程：
+
+1. 先排序。
+2. 跳過同一層的重複起點。
+
+Unique Permutation 的條件：
+
+```cpp
+if (i > 0
+    && nums[i] == nums[i - 1]
+    && !used[i - 1]) {
     continue;
 }
 ```
 
-這段條件的目的不是刪掉所有相同值，而是避免同一層開出重複分支。
-
-#### C++ Permutation 去重範例
+其中 `!used[i - 1]` 表示前一個相同值目前不在路徑內，因此兩者正在競爭同一層的同一位置。跳過後一個可避免等價分支。
 
 ```cpp
 #include <algorithm>
 #include <vector>
 
-void backtrackUniquePermutations(
+void collectUniquePermutations(
     const std::vector<int>& nums,
-    std::vector<int>& path,
     std::vector<bool>& used,
-    std::vector<std::vector<int>>& result)
-{
-    if (path.size() == nums.size())
-    {
+    std::vector<int>& path,
+    std::vector<std::vector<int>>& result) {
+
+    if (path.size() == nums.size()) {
         result.push_back(path);
         return;
     }
 
-    for (int i = 0; i < static_cast<int>(nums.size()); ++i)
-    {
-        if (used[i])
-        {
+    for (int i = 0;
+         i < static_cast<int>(nums.size());
+         ++i) {
+
+        if (used[i]) {
             continue;
         }
 
-        if (i > 0 && nums[i] == nums[i - 1] && !used[i - 1])
-        {
+        if (i > 0
+            && nums[i] == nums[i - 1]
+            && !used[i - 1]) {
             continue;
         }
 
         used[i] = true;
         path.push_back(nums[i]);
-
-        backtrackUniquePermutations(nums, path, used, result);
-
+        collectUniquePermutations(nums, used, path, result);
         path.pop_back();
         used[i] = false;
     }
 }
+```
 
-std::vector<std::vector<int>> permuteUnique(std::vector<int> nums)
-{
-    std::sort(nums.begin(), nums.end());
+去重不應只背條件。應先說明「哪些分支等價」以及「要避免的是同層重複，還是同一路徑重複」。
 
-    std::vector<std::vector<int>> result;
-    std::vector<int> path;
-    std::vector<bool> used(nums.size(), false);
+#### 「同層去重」與「同一路徑可重複值」
 
-    backtrackUniquePermutations(nums, path, used, result);
-    return result;
+以排序後的 `[1a, 1b, 2]` 為例，`1a`、`1b` 表示兩個值相同但 Index 不同的元素。
+
+在 Root 這一層：
+
+```text
+先由 1a 開分支
+再由 1b 開分支
+```
+
+兩棵子樹會產生相同的數值排列，所以第二個 Root 分支應跳過。
+
+但若 `1a` 已在目前路徑中，下一層選 `1b` 可能是合法的，因為答案確實可以包含兩個 1。這就是去重條件需要查看 `used[i - 1]` 的原因。
+
+### 22.9 Pruning
+
+Pruning 是提前停止可證明無法產生所需答案的分支。
+
+常見方向：
+
+- 剩餘候選不足以完成固定長度答案。
+- 目前成本已不可能優於已知最佳解。
+- 所有候選為正數，而且目前 Sum 已超過 Target。
+- 排序後，當目前候選已超過剩餘需求，後面候選也不可能成功。
+- Constraint 已被破壞，而且後續選擇無法修復。
+
+Pruning 必須建立在題目條件上。例如有負數時，`sum > target` 不代表後續無法回到 Target。
+
+正確性問題是：
+
+```text
+被剪掉的每個 State，是否都能證明沒有合法後代？
+```
+
+效能問題則是：
+
+```text
+剪枝能減少多少搜尋 Node？檢查成本本身是多少？
+```
+
+#### Pruning 不應改變答案集合
+
+Pruning 是效能改善，不是答案規則。加入 Pruning 前後，輸出的合法答案集合應相同。
+
+推薦驗證順序：
+
+1. 先完成沒有 Pruning 的版本。
+2. 用小型輸入列出完整答案。
+3. 加入一條 Pruning。
+4. 再比較答案集合。
+5. 每次只增加一項，較容易找到哪條推理造成漏解。
+
+#### 通用骨架應如何閱讀
+
+```cpp
+void backtrack(State& state) {
+    if (isComplete(state)) {
+        collect(state);
+        return;
+    }
+
+    for (const Candidate& candidate : candidates(state)) {
+        if (!isAllowed(state, candidate)) {
+            continue;
+        }
+
+        apply(state, candidate);
+        backtrack(state);
+        undo(state, candidate);
+    }
 }
 ```
 
-### 22.11 Constraint 與 Pruning
+這不是可直接套用所有題目的固定程式。真正需要依題目回答的是：
 
-Constraint 是題目的限制條件。
+- `State` 包含什麼？
+- `isComplete` 是答案條件還是失敗條件？
+- `candidates` 每一層有哪些候選？
+- `apply` 改了哪些資料？
+- `undo` 是否完整還原？
 
-Pruning 是根據限制提早停止不可能形成答案的分支。
+### 22.10 Backtracking 與 DFS、Brute Force
 
-例如題目要求選出的數字總和等於 target，而且所有數字都是正數。
+- DFS 描述搜尋樹或 Graph 的走訪順序。
+- Backtracking 常以 DFS 方式探索 Decision Tree，並在返回時還原 State。
+- Brute Force 表示全面枚舉候選；Backtracking 可以視為有結構的枚舉，並可加入 Constraint 與 Pruning。
 
-若目前總和已經超過 target，後面再加入正數只會更大，因此這條路不可能成功，可以停止。
+不是所有 DFS 都有狀態還原。例如只用 `visited` 走訪一般 Graph，可能不需要在返回時取消永久訪問標記。相反地，若 `visited` 表示「目前路徑中」，離開路徑時通常要還原。
+
+### 22.11 複雜度與輸出成本
+
+Backtracking 的成本通常至少與輸出數量相關：
+
+- Subset 有 `2^n` 個答案。
+- 長度 `k` 的 Combination 有 `C(n, k)` 個答案。
+- Permutation 有 `n!` 個答案。
+
+若每個答案都複製長度最多 `n` 的 `path`：
+
+```text
+Subset 輸出成本可達 O(n × 2^n)
+Permutation 輸出成本可達 O(n × n!)
+```
+
+Recursive Stack 與單一路徑通常使用 O(n) 空間，但 `result` 的儲存成本可能遠高於工作空間。
+
+Pruning 可改善特定輸入的搜尋量，但不一定改變最差情況上界。
+
+### 22.12 Iterative State 與例外安全
+
+「修改後還原」假設遞迴正常返回。若回呼、配置或其他函式可能丟出例外，手動 `pop_back` 可能無法執行。
+
+一般演算法題通常不處理此情境；正式程式可考慮：
+
+- 使用 State Copy。
+- 以 RAII Guard 在 Scope 結束時自動還原。
+- 限制遞迴區段中可能丟出例外的動作。
+
+此外，搜尋深度很大時可能造成 Stack Overflow。可改用明確 Stack 模擬 DFS，但「進入 State」與「離開 State」仍需清楚區分。
+
+### 22.13 系統化 Debug
+
+每次遞迴記錄：
+
+```text
+Depth
+Function Parameters
+path 進入時內容
+本層候選集合
+選取的候選
+遞迴前 State
+遞迴後 State
+撤銷後 State
+是否收集答案
+是否 Prune
+```
+
+建議流程：
+
+1. 使用 `[1, 2, 3]` 或更小輸入。
+2. 寫出預期答案集合，不只比較數量。
+3. 為每次函式呼叫印出 Depth 與 `path`。
+4. 檢查離開函式時 State 是否和進入時相同。
+5. 確認收集答案的時機。
+6. 關閉 Pruning 與去重，先驗證基本搜尋樹。
+7. 逐一重新加入最佳化。
+8. 找出第一個多出的分支、漏掉的分支或錯誤 State。
 
 ```mermaid
 flowchart TD
-    A["目前 path 與 sum"] --> B{"sum 是否超過 target"}
-    B -->|是| C["停止這條分支"]
-    B -->|否| D{"是否剛好形成答案"}
-    D -->|是| E["收集答案"]
-    D -->|否| F["繼續嘗試下一個候選"]
+    A["答案錯誤"] --> B["列出小型預期答案"]
+    B --> C["追蹤 Depth 與 Path"]
+    C --> D{"離開函式時 State 已還原嗎"}
+    D -->|否| E["修正 Undo"]
+    D -->|是| F["檢查候選範圍與收集條件"]
+    F --> G["最後檢查去重與 Pruning"]
 ```
 
-#### 剪枝前要確認條件
+### 22.14 常見問題與判讀
 
-Pruning 必須確認推理成立。
+| 現象 | 可能原因 | 第一輪檢查 |
+|---|---|---|
+| `path` 混入上一分支元素 | 未撤銷選擇 | 每個修改是否有對應 Undo |
+| Subset 少空集合 | 沒有收集初始 `path` | 空集合是否為合法答案 |
+| Combination 出現不同順序 | 下一層仍從頭掃描 | 使用 `startIndex` |
+| Combination 少答案 | Loop 上界 Pruning 錯誤 | 暫時移除 Pruning 比對 |
+| Permutation 少答案 | `used` 未還原 | 每個 `true` 是否回復 `false` |
+| Permutation 有重複元素 | 只檢查 `used`，未做同層去重 | 排序並檢查等價分支 |
+| 無限遞迴 | State 沒有進展 | 候選是否可重複且值為 0 或負數 |
+| Pruning 後漏答案 | 剪枝推理不成立 | 驗證被剪 State 是否真的無合法後代 |
+| 時間仍很高 | 輸出數量本身巨大 | 先估算 `2^n`、`C(n,k)`、`n!` |
+| 記憶體很高 | 保存所有答案 | 區分 Streaming Callback 與完整 Result |
+| Graph 路徑被錯誤排除 | 將永久 Visited 與目前路徑混用 | 定義 `visited` 的生命週期 |
 
-如果資料包含負數，現在總和超過 target，後面仍可能加入負數讓總和下降。這時不能直接用「超過 target 就停止」這種剪枝。
+### 22.15 本章檢查表
 
-因此剪枝前要先問：
+- 我能定義一個完整答案的格式。
+- 我能判斷順序是否重要、候選可使用幾次。
+- 我能寫出遞迴函式契約。
+- 我知道 `path` 表示目前搜尋路徑。
+- 我能確認離開函式時共享 State 完全還原。
+- 我知道 Subset 為何每個中間 `path` 都可收集。
+- 我知道 Combination 為何使用 `startIndex`。
+- 我知道 Permutation 為何使用 `used`。
+- 我能區分下一層傳入 `i` 與 `i + 1` 的語意。
+- 我能說明去重是在消除哪些等價分支。
+- 我不會在未證明時加入 Pruning。
+- 我能區分 DFS、Backtracking 與 Brute Force。
+- 我會把輸出數量納入複雜度。
+- 我能用小型搜尋樹找出第一個錯誤 State。
 
-- 後續選擇是否只會讓狀態往一個方向變化？
-- 是否所有數字都是正數？
-- 是否排序後可以安全停止後續候選？
+### 22.16 本章重點
 
-### 22.12 常見問題與判讀
-
-<table>
-<tr><th>現象</th><th>可能原因</th><th>第一輪檢查</th></tr>
-<tr><td>看不懂 `path.pop_back()`</td><td>還沒把 path 想成共用暫存路徑</td><td>用 `[1,2,3]` 手動追蹤 path 變化</td></tr>
-<tr><td>Subset 少空集合</td><td>沒有在進入函式時收集空 path</td><td>確認 `[]` 是否是合法答案</td></tr>
-<tr><td>Combination 出現 `[2,1]`</td><td>沒有使用 `startIndex`</td><td>下一層應從 `i + 1` 開始</td></tr>
-<tr><td>Permutation 少答案</td><td>`used` 沒有正確還原</td><td>每個 `used[i] = true` 都要有對應的 `false`</td></tr>
-<tr><td>答案重複</td><td>輸入有重複值，但沒有排序與跳過同層重複分支</td><td>先排序，再檢查去重條件</td></tr>
-<tr><td>剪枝後答案變少</td><td>剪枝條件不一定成立</td><td>確認是否含負數或非單調狀態</td></tr>
-<tr><td>時間複雜度低估</td><td>忽略答案數量本身很大</td><td>Subset 有 2^n 個答案，Permutation 有 n! 個答案</td></tr>
-</table>
-
-### 22.13 本章檢查表
-
-- 我能先用小型資料手動列出答案。
-- 我能說明 `path` 表示目前已經選到的內容。
-- 我能說明 `push_back` 是做選擇。
-- 我能說明 `pop_back` 是撤銷選擇，讓下一個分支不受影響。
-- 我知道 Subset 的每個中間 `path` 都是答案。
-- 我知道 Combination 只有長度達到 k 時才是答案。
-- 我知道 Subset 和 Combination 通常使用 `startIndex`。
-- 我知道 Permutation 通常使用 `used`。
-- 我能說明為什麼 Permutation 每一層要從頭掃過所有元素。
-- 我能判斷題目是否需要去除重複答案。
-- 我能確認每個狀態變更都有對應還原。
-- 我會使用 `[1, 2, 3]` 追蹤 Subset、Combination 與 Permutation。
-- 我知道剪枝必須先確認條件成立。
-
-### 22.14 本章重點
-
-- Backtracking 是一條路一條路嘗試答案。
-- 每一次嘗試通常包含做選擇、遞迴探索、撤銷選擇。
-- `path` 是目前正在形成的答案。
-- `path` 會被不同分支共用，因此離開分支前要還原。
-- Subset 長度不固定，所以每個中間 `path` 都可以收集。
-- Combination 長度固定，所以只有 `path.size() == k` 時收集。
-- Subset 和 Combination 不在乎順序，因此常用 `startIndex` 避免重複組合。
-- Permutation 在乎順序，因此常用 `used` 記錄哪些元素已經在目前 path 中。
-- 含重複值時，通常需要排序後跳過同一層的重複分支。
-- Pruning 可以減少搜尋，但必須確認剪枝條件真的成立。
-- 如果看不懂 Backtracking，先不要急著背模板，從手動追蹤 `path` 開始。
+- Backtracking 是沿 Decision Tree 逐一探索選擇的搜尋方式。
+- 每個分支通常包含做選擇、遞迴探索與撤銷選擇。
+- `path` 是目前答案前綴，而不是所有答案。
+- 遞迴函式離開時，共享 State 應與進入時相同。
+- Subset、Combination、Permutation 的主要差異是答案長度、順序與候選使用方式。
+- `startIndex` 避免產生同一組內容的不同順序；`used` 追蹤目前排列已使用的 Index。
+- 可重複選取時，下一層是否傳入 `i` 必須由題目規格決定。
+- 去重應先辨認同層等價分支，再寫跳過條件。
+- Pruning 必須證明被移除的 State 不可能有合法後代。
+- 執行成本常由搜尋樹與輸出數量主導，可能是指數或階乘等級。
+- Debug 時先停用最佳化，確認基本搜尋樹與 State 還原，再逐一加入去重與 Pruning。
