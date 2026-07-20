@@ -2,54 +2,67 @@
 
 ### 適用範圍
 
-本章說明如何在 Tree 與 Directed Acyclic Graph，簡稱 DAG，上進行 Dynamic Programming。
+本章介紹如何在 Tree 與 Directed Acyclic Graph，簡稱 DAG，上進行 Dynamic Programming。
 
-Tree DP 的核心是先完成 Child 或 Subtree，再把結果交給 Parent。DAG DP 的核心是依照不違反依賴的順序計算 State。原始章節也指出，初學時常見困難包含：`dp[node]` 到底代表單一節點或整棵 Subtree、為什麼 DFS Exit 時機適合計算 DP、選擇目前節點後 Child 狀態如何受限、DAG 為什麼需要 Topological Order，以及 Rerooting 為什麼不能對每個 Root 重新 DFS。citeturn44search1
+一般一維 DP 會依 Index 由小到大計算；Tree 與 DAG 沒有天然的線性順序，因此第一個問題不是「要開幾維 Array」，而是：
 
-本版會在原始主線上補強：
+```text
+目前 State 依賴哪些 State？
+要用什麼順序，才能先完成所有依賴？
+```
 
-- Tree DP 的 State 範圍與 Transition 推導。
-- 選 / 不選類 Tree DP 的完整可編譯 C++ 實作。
-- Tree Height、Diameter、Subtree Size 等常見 Tree DP 模型。
-- Rerooting 的觀念與範例推導。
-- DAG DP 的 Topological Order、最長路、路徑計數。
-- Tree / DAG DP 的 Debug 表與常見錯誤。
+Tree DP 通常先指定 Root，讓無向 Tree 形成 Parent / Child 關係，再以 Postorder 或 DFS Exit 順序完成 Children，最後合併 Parent。DAG DP 則利用 Topological Order，保證每條 Directed Edge 的來源先於目的地處理。
+
+本章會建立以下分析流程：
+
+1. 定義 `dp[node]` 涵蓋單一 Node、整棵 Subtree，還是「到達 Node」的路徑資訊。
+2. 確認目前 State 需要由哪些 Neighbor State 組成。
+3. 判斷是否需要選 / 不選、上一個位置或其他額外維度。
+4. 為 Tree 選擇 Root，並決定 Parent / Child 方向。
+5. 為 DAG 檢查 Directed Cycle，並取得 Topological Order。
+6. 設定 Leaf、Source 或其他 Base Case。
+7. 推導 Transition 與答案位置。
+8. 分析遞迴深度、Overflow、Reconstruction 與多個最佳解。
 
 ```mermaid
 flowchart TD
-    A["先定義每個 Node 的 State"] --> B["確認 State 依賴哪些 Neighbor"]
-    B --> C{"資料是 Tree 還是 DAG"}
-    C -->|Tree| D["先算 Children，再算 Parent"]
-    C -->|DAG| E["依 Topological Order 計算"]
+    A["定義每個 Node 的 State"] --> B["列出 State Dependency"]
+    B --> C{"Tree 還是 DAG"}
+    C -->|Tree| D["Root Tree，先算 Children"]
+    C -->|DAG| E["檢查 Cycle，建立 Topological Order"]
+    D --> F["合併 Child State"]
+    E --> G["依拓樸順序 Relax Transition"]
 ```
 
 ### 適用讀者
 
-- 已學過一維 DP，但不熟悉 Tree / Graph 上 State 依賴的讀者。
-- 能寫 DFS，但不清楚 DFS 回來時要如何合併 Child State 的讀者。
-- 容易把 `dp[node]` 誤解成只和 node 本身有關的讀者。
-- 想理解 Maximum Independent Set on Tree、Tree Diameter、Rerooting、DAG Longest Path 的讀者。
-- 常在無向 Tree 中忘記排除 Parent，或在 DAG 中沒有依 Topological Order 計算的讀者。
+- 已理解基本 DP，但不熟悉非線性 State Dependency 的讀者。
+- 能寫 DFS，卻不清楚為何 Tree DP 常在 DFS 回程時合併答案的讀者。
+- 容易把 `dp[node]` 誤解成只描述 Node 本身的讀者。
+- 想理解 Maximum Independent Set、Tree Diameter、Rerooting 與 DAG Longest Path 的讀者。
+- 在無向 Tree 中容易走回 Parent，或在 DAG 中未依 Topological Order 計算的讀者。
+- 需要處理深 Tree、不可達 State、路徑數 Overflow 或 Reconstruction 的讀者。
 
 ### 快速導覽
 
 - [43.1 Tree DP 前到底要分析什麼](#431-tree-dp-前到底要分析什麼)
-- [43.2 Subtree State](#432-subtree-state)
-- [43.3 DFS Exit 時機與 Parent-Child Transition](#433-dfs-exit-時機與-parent-child-transition)
-- [43.4 選擇與不選擇](#434-選擇與不選擇)
-- [43.5 完整 Tree DP 範例：Maximum Independent Set](#435-完整-tree-dp-範例maximum-independent-set)
+- [43.2 Subtree State 與函式契約](#432-subtree-state-與函式契約)
+- [43.3 DFS Exit 與 Child Merge](#433-dfs-exit-與-child-merge)
+- [43.4 選與不選 State](#434-選與不選-state)
+- [43.5 完整案例：Maximum Weighted Independent Set](#435-完整案例maximum-weighted-independent-set)
 - [43.6 常見 Tree DP 模型](#436-常見-tree-dp-模型)
-- [43.7 Rerooting](#437-rerooting)
-- [43.8 Rerooting 範例：所有 Root 的距離和](#438-rerooting-範例所有-root-的距離和)
-- [43.9 DAG DP](#439-dag-dp)
-- [43.10 Topological Order](#4310-topological-order)
-- [43.11 DAG DP 範例：最長路徑](#4311-dag-dp-範例最長路徑)
-- [43.12 DAG DP 範例：路徑數](#4312-dag-dp-範例路徑數)
-- [43.13 Tree DP 與 DAG DP 比較](#4313-tree-dp-與-dag-dp-比較)
-- [43.14 系統化 Debug](#4314-系統化-debug)
-- [43.15 常見問題與判讀](#4315-常見問題與判讀)
-- [43.16 本章檢查表](#4316-本章檢查表)
-- [43.17 本章重點](#4317-本章重點)
+- [43.7 Rerooting 的兩階段模型](#437-rerooting-的兩階段模型)
+- [43.8 完整案例：每個 Node 的距離總和](#438-完整案例每個-node-的距離總和)
+- [43.9 DAG DP 與 Topological Order](#439-dag-dp-與-topological-order)
+- [43.10 完整案例：DAG Longest Path](#4310-完整案例dag-longest-path)
+- [43.11 完整案例：DAG Path Count](#4311-完整案例dag-path-count)
+- [43.12 Tree DP 與 DAG DP 比較](#4312-tree-dp-與-dag-dp-比較)
+- [43.13 Reconstruction、Tie-breaking 與深度問題](#4313-reconstructiontie-breaking-與深度問題)
+- [43.14 複雜度分析](#4314-複雜度分析)
+- [43.15 系統化 Debug](#4315-系統化-debug)
+- [43.16 常見問題與判讀](#4316-常見問題與判讀)
+- [43.17 本章檢查表](#4317-本章檢查表)
+- [43.18 本章重點](#4318-本章重點)
 
 ### 43.1 Tree DP 前到底要分析什麼
 
@@ -65,8 +78,6 @@ flowchart TD
 <tr><td>答案</td><td>Root 選與不選兩種狀態的最大值</td><td>`max(dp[root][0], dp[root][1])`</td></tr>
 </table>
 
-若只使用一個 `dp[node]`，無法區分目前 Node 是否已選，Parent 就不知道 Child 哪些答案合法。因此需要兩個 State。原始章節也以同一題說明，未來合法選擇若取決於目前是否已選取，就需要分開 State。citeturn44search1
-
 #### Tree DP 前五問
 
 1. Root 是否任選？
@@ -75,7 +86,7 @@ flowchart TD
 4. Transition 是合併所有 Child，還是選其中一個 Child？
 5. 答案在 Root，還是每個 Node 都要答案？
 
-### 43.2 Subtree State
+### 43.2 Subtree State 與函式契約
 
 指定 Root 後，每個 Node 都代表一棵 Subtree。
 
@@ -86,8 +97,6 @@ dp[node][0] = 不選 node 時，node Subtree 的最大總價值
 dp[node][1] = 選 node 時，node Subtree 的最大總價值
 ```
 
-這裡的答案不是只有目前 Node，而是包含它下面所有 Descendants。原始章節也特別強調，Tree DP 中的 Subtree State 包含整棵 Subtree，而不只是 node 本身。citeturn44search1
-
 ```mermaid
 graph TD
     A["A"] --> B["B"]
@@ -97,6 +106,18 @@ graph TD
 ```
 
 計算 A 前，需要先完成 B、C；計算 B 前，需要先完成 D、E。
+
+#### 遞迴函式契約
+
+Tree DP 的 DFS 應先寫出契約。例如：
+
+```text
+treeDp(node, parent)
+完成以 node 為 Root 的 Subtree DP，
+而且不沿著 parent 方向返回。
+```
+
+契約中的「Subtree」依目前選定的 Root 決定。相同的無向 Tree 若換 Root，Parent / Child 關係會改變；若題目只求全樹單一答案，通常可任選 Root。若題目要求每個 Node 作為 Root 的答案，則需要 Rerooting 或其他全樹資訊傳遞。
 
 #### Subtree State 的常見形式
 
@@ -109,7 +130,7 @@ graph TD
 <tr><td>Tree Knapsack</td><td>`dp[node][k]`</td><td>node Subtree 選 k 個時的最佳值</td></tr>
 </table>
 
-### 43.3 DFS Exit 時機與 Parent-Child Transition
+### 43.3 DFS Exit 與 Child Merge
 
 Tree DP 常在 DFS Exit 時完成 Transition。原因是：進入 node 時，Child 的答案還沒有算完；等 Child DFS 回來後，才有足夠資訊合併 Parent。
 
@@ -126,8 +147,6 @@ dp[node][1] += dp[child][0]
 ```text
 dp[node][0] += max(dp[child][0], dp[child][1])
 ```
-
-原始章節也列出這兩條 Transition，並提醒 Transition 必須根據相鄰限制推導，不是固定模板。citeturn44search1
 
 ```mermaid
 flowchart LR
@@ -148,7 +167,7 @@ flowchart LR
 <tr><td>取 min / max 狀態</td><td>Minimum Vertex Cover on Tree</td></tr>
 </table>
 
-### 43.4 選擇與不選擇
+### 43.4 選與不選 State
 
 以 Leaf 為例：
 
@@ -162,8 +181,6 @@ dp[leaf][1] = value[leaf]
 1. 先把選中自己的價值放入 `dp[node][1]`。
 2. 逐一合併每個 Child 的答案。
 3. 不選自己的 State 可自由選擇 Child 最佳狀態。
-
-原始章節也指出，這類「選或不選」State 常出現在 House Robber on Tree、Maximum Independent Set on Tree 等問題。citeturn44search1
 
 #### 如何判斷需要選 / 不選 State
 
@@ -184,65 +201,137 @@ dp[node][0] = 不選 node 的最佳值
 dp[node][1] = 選 node 的最佳值
 ```
 
-### 43.5 完整 Tree DP 範例：Maximum Independent Set
+### 43.5 完整案例：Maximum Weighted Independent Set
 
-題目：給定一棵無向 Tree，每個 Node 有 value。選一些 Node，使任何相鄰 Node 不能同時被選，最大化 value 總和。
+#### 問題規格
+
+給定一棵無向 Tree，每個 Node 有一個 `value`。選擇一些 Node，使任何相鄰 Node 不能同時被選，並最大化總價值。
+
+本節假設：
+
+- `graph` 是合法且連通的無向 Tree。
+- Node 編號為 `0` 到 `n - 1`。
+- `graph.size() == value.size()`。
+- 空 Tree 的答案定義為 0。
+
+#### State
+
+```text
+dp[node][0]
+= 不選 node 時，node Subtree 可取得的最大總價值
+
+dp[node][1]
+= 選 node 時，node Subtree 可取得的最大總價值
+```
+
+#### Base Case
+
+對 Leaf：
+
+```text
+dp[leaf][0] = 0
+dp[leaf][1] = value[leaf]
+```
+
+一般 Node 也可以使用相同初始化，再逐一合併 Child。
+
+#### Transition
+
+若選 `node`，每個 Child 都不能選：
+
+```text
+dp[node][1] += dp[child][0]
+```
+
+若不選 `node`，每個 Child 可獨立選擇較好的合法狀態：
+
+```text
+dp[node][0] += max(dp[child][0], dp[child][1])
+```
+
+#### C++20 實作
 
 ```cpp
 #include <algorithm>
 #include <array>
+#include <stdexcept>
 #include <vector>
 
-void treeDp(
+void computeIndependentSetDp(
     const std::vector<std::vector<int>>& graph,
     const std::vector<long long>& value,
     int node,
     int parent,
-    std::vector<std::array<long long, 2>>& dp)
-{
+    std::vector<std::array<long long, 2>>& dp) {
+
     dp[node][0] = 0;
     dp[node][1] = value[node];
 
-    for (int child : graph[node])
-    {
-        if (child == parent)
-        {
+    for (int child : graph[node]) {
+        if (child == parent) {
             continue;
         }
 
-        treeDp(graph, value, child, node, dp);
+        computeIndependentSetDp(
+            graph,
+            value,
+            child,
+            node,
+            dp);
 
-        dp[node][0] += std::max(dp[child][0], dp[child][1]);
+        dp[node][0] += std::max(
+            dp[child][0],
+            dp[child][1]);
+
         dp[node][1] += dp[child][0];
     }
 }
 
 long long maximumIndependentValue(
     const std::vector<std::vector<int>>& graph,
-    const std::vector<long long>& value)
-{
-    if (graph.empty())
-    {
+    const std::vector<long long>& value) {
+
+    if (graph.size() != value.size()) {
+        throw std::invalid_argument(
+            "graph and value sizes must match");
+    }
+
+    if (graph.empty()) {
         return 0;
     }
 
-    std::vector<std::array<long long, 2>> dp(graph.size());
-    treeDp(graph, value, 0, -1, dp);
+    std::vector<std::array<long long, 2>> dp(
+        graph.size(),
+        std::array<long long, 2>{0, 0});
+
+    computeIndependentSetDp(
+        graph,
+        value,
+        0,
+        -1,
+        dp);
 
     return std::max(dp[0][0], dp[0][1]);
 }
 ```
 
-原始章節也提供了這個 Tree DP 範例，並提醒無向 Adjacency List 中要用 `parent` 避免沿同一條 Edge 返回上一層。citeturn44search1
+#### 正確性思路
+
+以 Postorder 歸納：
+
+1. Leaf 的兩個 State 符合定義。
+2. 假設所有 Child State 都正確。
+3. 選 `node` 時，限制迫使所有 Child 使用不選狀態。
+4. 不選 `node` 時，各 Child Subtree 彼此沒有 Edge，可獨立取兩個狀態的最大值。
+5. 加總所有 Child 後，兩個 Parent State 都符合定義。
+
+Root 沒有 Parent 限制，因此答案是兩個 Root State 的最大值。
 
 #### 複雜度
 
-```text
-時間：O(V)
-空間：O(V) + 遞迴 Stack O(h)
-```
-
-每條 Tree Edge 只被檢查固定次數。原始章節也指出此範例時間複雜度為 O(V)。citeturn44search1
+- 每條無向 Edge 被檢查固定次數，時間複雜度 O(V)。
+- DP Table 使用 O(V) 空間。
+- Recursive Call Stack 使用 O(h) 空間，其中 `h` 是 Rooted Tree Height。
 
 ### 43.6 常見 Tree DP 模型
 
@@ -306,13 +395,9 @@ dp[node][1] = 1 + sum(min(dp[child][0], dp[child][1]))
 dp[node][0] = sum(dp[child][1])
 ```
 
-這和 Independent Set 的 Transition 不同，原因是限制不同。這也呼應原始章節的提醒：Transition 必須由限制推導，不是固定模板。citeturn44search1
-
-### 43.7 Rerooting
+### 43.7 Rerooting 的兩階段模型
 
 有些題目要求每個 Node 作為 Root 時的答案。直接對每個 Root 重新 DFS，時間可能是 O(V²)。Rerooting 會重用相鄰 Root 之間的大部分結果。
-
-原始章節也說明，Rerooting 通常分兩階段：Bottom-up 計算每個 Subtree 對目前 Root 的貢獻，Top-down 將 Parent 方向的貢獻傳給 Child。citeturn44search1
 
 ```mermaid
 flowchart TD
@@ -331,8 +416,6 @@ flowchart TD
 哪些貢獻要加入 child？
 ```
 
-原始章節也提醒，新手應先確定「從 Parent 移到 Child 時，哪些貢獻要移除、哪些要加入」。citeturn44search1
-
 #### Rerooting 適合題型
 
 - 每個 Node 作為 Root 的 Subtree / 距離答案。
@@ -340,58 +423,62 @@ flowchart TD
 - 每個 Node 作為中心時的某種成本。
 - 需要全樹答案，但每個 Root 都要輸出。
 
-### 43.8 Rerooting 範例：所有 Root 的距離和
+### 43.8 完整案例：每個 Node 的距離總和
 
-題目：給定一棵 Tree，對每個 node，求它到所有其他 Node 的距離總和。
+#### 問題規格
+
+對 Tree 中每個 `node`，計算它到所有其他 Node 的 Edge Distance 總和。
+
+若對每個 Root 都重新 DFS，時間為 O(V²)。Rerooting 使用兩次 DFS 將時間降低為 O(V)。
 
 #### 第一階段：以 0 為 Root
 
 計算：
 
 ```text
-subtreeSize[node]
-distanceSum[0] = root 0 到所有 Node 的距離總和
+subtreeSize[node] = node Subtree 的 Node 數量
+answer[0] = Root 0 到所有 Node 的距離總和
 ```
 
-#### 第二階段：從 parent 轉移到 child
+#### 第二階段：從 Parent 轉移到 Child
 
-假設目前知道 `answer[parent]`，要算 `answer[child]`。
+Root 從 `parent` 移到相鄰 `child` 時：
 
-Root 從 parent 移到 child：
+- `child` Subtree 內共有 `subtreeSize[child]` 個 Node，距離各減少 1。
+- Subtree 外共有 `n - subtreeSize[child]` 個 Node，距離各增加 1。
 
-- child Subtree 中的所有 Node 距離都減少 1，共 `subtreeSize[child]` 個。
-- 其他 Node 距離都增加 1，共 `n - subtreeSize[child]` 個。
-
-所以：
+因此：
 
 ```text
-answer[child] = answer[parent]
-              - subtreeSize[child]
-              + (n - subtreeSize[child])
+answer[child]
+= answer[parent]
+- subtreeSize[child]
++ (n - subtreeSize[child])
 ```
 
-#### C++ 片段
+#### C++20 實作
 
 ```cpp
-void dfsSubtree(
+#include <stdexcept>
+#include <vector>
+
+void collectSubtreeInformation(
     const std::vector<std::vector<int>>& graph,
     int node,
     int parent,
     int depth,
     std::vector<int>& subtreeSize,
-    long long& rootDistanceSum)
-{
+    long long& rootDistanceSum) {
+
     subtreeSize[node] = 1;
     rootDistanceSum += depth;
 
-    for (int child : graph[node])
-    {
-        if (child == parent)
-        {
+    for (int child : graph[node]) {
+        if (child == parent) {
             continue;
         }
 
-        dfsSubtree(
+        collectSubtreeInformation(
             graph,
             child,
             node,
@@ -403,155 +490,192 @@ void dfsSubtree(
     }
 }
 
-void dfsReroot(
+void propagateRerootAnswers(
     const std::vector<std::vector<int>>& graph,
     int node,
     int parent,
     const std::vector<int>& subtreeSize,
-    std::vector<long long>& answer)
-{
-    const int n = static_cast<int>(graph.size());
+    std::vector<long long>& answer) {
 
-    for (int child : graph[node])
-    {
-        if (child == parent)
-        {
+    const long long n =
+        static_cast<long long>(graph.size());
+
+    for (int child : graph[node]) {
+        if (child == parent) {
             continue;
         }
 
-        answer[child] = answer[node]
-                      - subtreeSize[child]
-                      + (n - subtreeSize[child]);
+        answer[child] =
+            answer[node]
+            - subtreeSize[child]
+            + (n - subtreeSize[child]);
 
-        dfsReroot(graph, child, node, subtreeSize, answer);
+        propagateRerootAnswers(
+            graph,
+            child,
+            node,
+            subtreeSize,
+            answer);
     }
 }
 
 std::vector<long long> sumOfDistancesFromEachNode(
-    const std::vector<std::vector<int>>& graph)
-{
+    const std::vector<std::vector<int>>& graph) {
+
     const int n = static_cast<int>(graph.size());
+
+    if (n == 0) {
+        return {};
+    }
+
     std::vector<int> subtreeSize(n, 0);
     std::vector<long long> answer(n, 0);
-
     long long rootDistanceSum = 0;
-    dfsSubtree(graph, 0, -1, 0, subtreeSize, rootDistanceSum);
+
+    collectSubtreeInformation(
+        graph,
+        0,
+        -1,
+        0,
+        subtreeSize,
+        rootDistanceSum);
 
     answer[0] = rootDistanceSum;
-    dfsReroot(graph, 0, -1, subtreeSize, answer);
+
+    propagateRerootAnswers(
+        graph,
+        0,
+        -1,
+        subtreeSize,
+        answer);
 
     return answer;
 }
 ```
 
+#### Rerooting Invariant
+
+第二次 DFS 處理 `node` 時：
+
+1. `answer[node]` 已是 `node` 到全 Tree 的距離總和。
+2. `subtreeSize[child]` 仍以初始 Root 0 的方向定義。
+3. Parent 到 Child 的公式可在 O(1) 時間算出 `answer[child]`。
+
 #### 複雜度
 
-```text
-兩次 DFS：O(V)
-空間：O(V) + 遞迴 Stack
-```
+兩次 DFS 都是 O(V)，總時間 O(V)，額外資料 O(V)，Recursive Call Stack O(h)。
 
-### 43.9 DAG DP
+### 43.9 DAG DP 與 Topological Order
 
-DAG 沒有 Directed Cycle，因此 State 依賴可以形成先後順序。
+DAG 沒有 Directed Cycle，因此其 State Dependency 可以排成合法先後順序。
 
-例如最長路徑：
+若存在 Edge：
 
 ```text
-dp[v] = 到達 v 的最長距離
+u -> v
 ```
 
-對 Edge `u -> v`：
-
-```text
-dp[v] = max(dp[v], dp[u] + weight(u, v))
-```
-
-必須先完成 u，才能更新 v。因此需要 Topological Order。原始章節也明確指出，DAG DP 必須依 Topological Order，否則可能讀到未完成 State。citeturn44search1
-
-#### DAG DP 常見題型
-
-<table>
-<tr><th>題型</th><th>State</th><th>Transition</th></tr>
-<tr><td>Longest Path in DAG</td><td>`dp[v]` 到 v 的最長距離</td><td>由 predecessor 或 outgoing edge 更新</td></tr>
-<tr><td>Path Count</td><td>`dp[v]` 到 v 的路徑數</td><td>加總前一層 State</td></tr>
-<tr><td>Course Schedule</td><td>Topological Order</td><td>Indegree 遞減</td></tr>
-<tr><td>DAG Shortest Path</td><td>`dist[v]`</td><td>Topological Order Relax Edge</td></tr>
-<tr><td>Dependency DP</td><td>依題目定義</td><td>依拓樸順序合併所需資訊</td></tr>
-</table>
-
-### 43.10 Topological Order
-
-Topological Order 保證每條 Directed Edge `u -> v` 中，u 會出現在 v 前面。
-
-原始章節也說明，若 Graph 有 Directed Cycle，就不存在完整 Topological Order，DAG DP 的計算方式也失去前置條件。citeturn44search1
+而 `dp[v]` 依賴 `dp[u]`，就必須先完成 `u`。Topological Order 保證每條 Directed Edge 的來源都出現在目的地之前。
 
 #### Kahn Algorithm
 
 ```cpp
+#include <optional>
 #include <queue>
 #include <vector>
 
-std::vector<int> topologicalSort(
-    const std::vector<std::vector<int>>& graph)
-{
+std::optional<std::vector<int>> topologicalSort(
+    const std::vector<std::vector<int>>& graph) {
+
     const int n = static_cast<int>(graph.size());
     std::vector<int> indegree(n, 0);
 
-    for (int node = 0; node < n; ++node)
-    {
-        for (int next : graph[node])
-        {
+    for (int node = 0; node < n; ++node) {
+        for (int next : graph[node]) {
             ++indegree[next];
         }
     }
 
     std::queue<int> ready;
 
-    for (int node = 0; node < n; ++node)
-    {
-        if (indegree[node] == 0)
-        {
+    for (int node = 0; node < n; ++node) {
+        if (indegree[node] == 0) {
             ready.push(node);
         }
     }
 
     std::vector<int> order;
+    order.reserve(n);
 
-    while (!ready.empty())
-    {
-        int node = ready.front();
+    while (!ready.empty()) {
+        const int node = ready.front();
         ready.pop();
         order.push_back(node);
 
-        for (int next : graph[node])
-        {
+        for (int next : graph[node]) {
             --indegree[next];
 
-            if (indegree[next] == 0)
-            {
+            if (indegree[next] == 0) {
                 ready.push(next);
             }
         }
+    }
+
+    if (static_cast<int>(order.size()) != n) {
+        return std::nullopt;
     }
 
     return order;
 }
 ```
 
-若 `order.size() != n`，表示 Graph 中存在 Directed Cycle，不能直接做 DAG DP。
+若無法取得包含全部 Node 的 Topological Order，表示 Graph 有 Directed Cycle，不能直接使用本章的 DAG DP 填表方式。
 
-### 43.11 DAG DP 範例：最長路徑
+DAG DP 的 State 可以描述：
 
-給定 DAG 與 weighted edge，從 source 出發，求到每個 Node 的最長距離。
+- 從 Source 到達某 Node 的最長或最短距離。
+- 從 Source 到某 Node 的路徑數。
+- 從某 Node 出發的最佳後續答案。
+- 完成某項 Dependency 後的最早或最晚時間。
+
+State Definition 會決定 Edge Relax 的方向。若定義「到達 `v` 的答案」，通常由 Predecessor 更新 `v`；若定義「從 `u` 出發的答案」，也可反向 Topological Order 合併 Successor。
+
+### 43.10 完整案例：DAG Longest Path
+
+#### 問題規格
+
+給定 Weighted DAG 與 `source`，求從 `source` 到每個 Node 的最長距離。允許 Edge Weight 為負數，但 Graph 必須是 DAG。
+
+#### State
+
+```text
+dp[node] = 從 source 到 node 的最長距離
+```
+
+不可達 Node 使用 `NEG_INF`。
+
+#### Transition
+
+對每條 Edge `node -> next`：
+
+```text
+dp[next] = max(
+    dp[next],
+    dp[node] + weight(node, next)
+)
+```
+
+只有 `dp[node]` 可達時才能 Relax。
+
+#### C++20 實作
 
 ```cpp
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
 #include <vector>
 
-struct Edge
-{
+struct Edge {
     int to;
     long long weight;
 };
@@ -559,23 +683,26 @@ struct Edge
 std::vector<long long> longestPathInDag(
     const std::vector<std::vector<Edge>>& graph,
     const std::vector<int>& topologicalOrder,
-    int source)
-{
-    const long long NEG_INF = std::numeric_limits<long long>::lowest() / 4;
+    int source) {
+
     const int n = static_cast<int>(graph.size());
+
+    if (source < 0 || source >= n) {
+        throw std::out_of_range("invalid source");
+    }
+
+    const long long NEG_INF =
+        std::numeric_limits<long long>::lowest() / 4;
 
     std::vector<long long> dp(n, NEG_INF);
     dp[source] = 0;
 
-    for (int node : topologicalOrder)
-    {
-        if (dp[node] == NEG_INF)
-        {
+    for (int node : topologicalOrder) {
+        if (dp[node] == NEG_INF) {
             continue;
         }
 
-        for (const Edge& edge : graph[node])
-        {
+        for (const Edge& edge : graph[node]) {
             dp[edge.to] = std::max(
                 dp[edge.to],
                 dp[node] + edge.weight);
@@ -586,35 +713,71 @@ std::vector<long long> longestPathInDag(
 }
 ```
 
-原始章節也提供了類似的 DAG DP pseudo code：依 Topological Order，對每條 Edge `u -> v` 更新 `dp[v]`。citeturn44search1
+#### 為什麼負 Edge 仍可處理
+
+DAG 沒有 Cycle，Topological Order 會在處理 `node` 前完成所有能到達它的 Predecessor。每條 Edge 只需 Relax 一次，不需要 Dijkstra 的非負權重前提。
+
+使用 Sentinel 仍需依題目成本上限檢查 `dp[node] + edge.weight` 是否可能 Overflow。
 
 #### 複雜度
 
+- Topological Sort：O(V + E)。
+- DP Relax：O(V + E)。
+- 總時間：O(V + E)。
+- Graph、Order 與 DP 空間：O(V + E)。
+
+### 43.11 完整案例：DAG Path Count
+
+#### 問題規格
+
+給定 DAG 與 `source`，計算從 `source` 到每個 Node 的 Directed Path 數量。
+
+#### State 與 Base Case
+
 ```text
-Topological Sort：O(V + E)
-DP Relax Edge：O(V + E)
-總時間：O(V + E)
-空間：O(V + E)
+dp[node] = 從 source 到 node 的路徑數
+dp[source] = 1
 ```
 
-### 43.12 DAG DP 範例：路徑數
+`dp[source] = 1` 表示從 Source 到自身的空路徑有一種。若題目不把空路徑算入答案，應在輸出規格中另行處理，而不是模糊修改 Transition。
 
-題目：給定 DAG，求從 source 到每個 Node 的路徑數。
+#### Transition
+
+對每條 Edge `node -> next`：
+
+```text
+dp[next] += dp[node]
+```
+
+每條到達 `node` 的路徑都可再接上這條 Edge，形成一條到達 `next` 的路徑。
+
+#### C++20 實作
 
 ```cpp
-std::vector<long long> countPathsInDag(
+#include <cstdint>
+#include <stdexcept>
+#include <vector>
+
+std::vector<std::uint64_t> countPathsInDag(
     const std::vector<std::vector<int>>& graph,
     const std::vector<int>& topologicalOrder,
-    int source)
-{
+    int source) {
+
     const int n = static_cast<int>(graph.size());
-    std::vector<long long> dp(n, 0);
+
+    if (source < 0 || source >= n) {
+        throw std::out_of_range("invalid source");
+    }
+
+    std::vector<std::uint64_t> dp(n, 0);
     dp[source] = 1;
 
-    for (int node : topologicalOrder)
-    {
-        for (int next : graph[node])
-        {
+    for (int node : topologicalOrder) {
+        if (dp[node] == 0) {
+            continue;
+        }
+
+        for (int next : graph[node]) {
             dp[next] += dp[node];
         }
     }
@@ -623,128 +786,219 @@ std::vector<long long> countPathsInDag(
 }
 ```
 
-若答案很大，需依題目要求取 mod。
+路徑數可能非常大。若題目要求 Modulo，應在每次加法後依規格取模；若要求精確大整數，需使用合適型別或函式庫。`std::uint64_t` 仍可能 Overflow。
 
-#### 注意
+若 Graph 中有 Parallel Edges，兩條不同 Edge 是否代表兩條不同路徑，必須由題目定義。上面的 Transition 會把每條 Edge 視為獨立選擇。
 
-若 source 在 Topological Order 中較後面，不影響正確性。source 前面的 Node dp 為 0，處理它們不會造成貢獻。
+### 43.12 Tree DP 與 DAG DP 比較
 
-### 43.13 Tree DP 與 DAG DP 比較
+| 項目 | Tree DP | DAG DP |
+|---|---|---|
+| 資料結構 | Tree，常以無向 Adjacency List 表示 | Directed Acyclic Graph |
+| 依賴方向 | Root 後形成 Parent / Child | Directed Edge 與 Topological Order |
+| 常見順序 | DFS Exit / Postorder | Topological Order |
+| Cycle 處理 | 排除 Parent，且輸入必須真的是 Tree | 必須確認沒有 Directed Cycle |
+| 常見 State | Subtree、選 / 不選、Height | 到達 Node 的距離、路徑數、Dependency Value |
+| 合併方式 | 合併所有 Child 或取前幾大 Child | 沿 Edge Relax Successor |
+| 常見擴充 | Rerooting、Tree Knapsack | Longest / Shortest Path、Path Count |
 
-<table>
-<tr><th>項目</th><th>Tree DP</th><th>DAG DP</th></tr>
-<tr><td>資料結構</td><td>Tree，通常無向</td><td>Directed Acyclic Graph</td></tr>
-<tr><td>依賴方向</td><td>Root 後 Parent / Child</td><td>Directed Edge 與 Topological Order</td></tr>
-<tr><td>計算順序</td><td>DFS Exit / Postorder</td><td>Topological Order</td></tr>
-<tr><td>Cycle 問題</td><td>無向 Tree 需排除 parent</td><td>不能有 Directed Cycle</td></tr>
-<tr><td>常見 State</td><td>Subtree、選 / 不選、Height</td><td>到達某 Node 的值、路徑數、最長距離</td></tr>
-<tr><td>常見錯誤</td><td>忘記 parent，State 不足</td><td>未拓樸排序，讀未完成 State</td></tr>
-</table>
-
-#### 共同核心
-
-Tree 與 DAG 的共同核心是：
+共同核心是：
 
 ```text
-先完成依賴 State，再計算目前 State。
+先完成目前 State 依賴的資訊，再計算目前 State。
 ```
 
-這也是原始章節的本章重點之一。citeturn44search1
+Tree 的 Rooting 與 DAG 的 Topological Sort，都是在建立清楚的 Dependency Order。
 
-### 43.14 系統化 Debug
+### 43.13 Reconstruction、Tie-breaking 與深度問題
 
-#### Tree DP Debug 欄位
+#### Reconstruction
+
+若只保存最佳值，未必能還原實際選擇。
+
+Maximum Independent Set 可在第二次 DFS 中依 Parent 選擇狀態決定 Child：
+
+- Parent 已選，Child 必須不選。
+- Parent 未選，Child 可選擇較大的 State。
+
+DAG Longest Path 可保存：
+
+```text
+parent[next] = node
+```
+
+每當 `dp[next]` 被改善時同步更新 Parent，最後從目標逆向回溯。
+
+#### Tie-breaking
+
+若兩個候選值相同，題目可能允許任一答案，也可能要求：
+
+- 字典序較小路徑。
+- Node 數較少或較多。
+- 編號較小的前驅。
+
+Tie-breaking 應寫入 Transition，不能只在回溯時臨時決定，否則保存的 Parent 可能不符合需求。
+
+#### 深 Tree 的 Recursive Stack
+
+鏈狀 Tree 的 Height 可達 O(V)，Recursive DFS 可能超過執行環境的 Stack 限制。可改用 Iterative DFS：
+
+1. 先建立 Parent 與 Traversal Order。
+2. 反向 Traversal Order，以 Postorder 合併 Child DP。
+3. Rerooting 第二階段再依正向 Order 傳遞 Parent 資訊。
+
+這不改變 DP State，只改變求值方式。
+
+### 43.14 複雜度分析
+
+不要因為是 Tree 或 DAG 就直接寫 O(V + E)。還要看每次合併的成本。
+
+#### 線性合併
+
+若每條 Edge 只做 O(1) State 更新：
+
+```text
+時間：O(V + E)
+```
+
+Tree 中 `E = V - 1`，因此常簡寫為 O(V)。
+
+#### Tree Knapsack
+
+若 `dp[node][k]` 需要逐 Child 合併不同選取數量，單次 Merge 可能是 O(K²)，總時間取決於 Subtree Size 與容量上限，不能只算 DFS Edge 數。
+
+#### Rerooting
+
+若 Parent 到 Child 的轉移可在 O(1) 完成，兩次 DFS 為 O(V)。若每次轉 Root 都重新掃描所有 Neighbor Contribution，則高 Degree Node 可能造成額外成本。一般 Rerooting 會使用 Prefix / Suffix Merge 或排除單一 Child 的技巧，確保總成本符合預期。
+
+#### DAG DP
+
+若每條 Edge Relax 為 O(1)，時間 O(V + E)。若 State 還包含容量、顏色或其他維度，應再乘上額外 State 與 Transition 成本。
+
+### 43.15 系統化 Debug
+
+#### Tree DP 記錄欄位
 
 ```text
 node
 parent
 children
-進入 node 時初始 dp
-每個 child 回傳後的 dp[child]
-合併 child 後的 dp[node]
-離開 node 時的最終 dp
+進入 node 時的 Base State
+每個 child 的最終 State
+合併 child 前後的 node State
+離開 node 時的最終 State
 ```
 
-#### DAG DP Debug 欄位
+#### DAG DP 記錄欄位
 
 ```text
-topological order
-node 是否已可達
-dp[node] 目前值
-edge.to
-更新前 dp[edge.to]
-更新後 dp[edge.to]
+Topological Order
+目前 node 是否可達
+處理前 dp[node]
+Edge node -> next
+更新前 dp[next]
+候選值
+更新後 dp[next]
 ```
+
+#### 建議排查順序
+
+1. 用單一 Node 驗證 Base Case。
+2. 用兩個 Node 驗證 Parent / Child 限制。
+3. 用三個 Node 的鏈與星狀 Tree 比較合併行為。
+4. 確認無向 Tree 不會走回 Parent。
+5. 確認 State 描述整棵 Subtree，而非單一 Node。
+6. DAG 先檢查 Topological Order 是否含全部 Node。
+7. 確認不可達 State 不會參與 Transition。
+8. 用暴力枚舉比對小型 Tree 或 DAG。
+9. 保留第一個不符合 State Definition 的 Node。
 
 ```mermaid
 flowchart TD
     A["DP 答案錯誤"] --> B{"Tree 還是 DAG"}
-    B -->|Tree| C["檢查 parent / visited 與 DFS Exit"]
-    B -->|DAG| D["檢查 Topological Order 與 Cycle"]
-    C --> E["逐 Child 合併 State"]
+    B -->|Tree| C["檢查 Root、Parent 與 DFS Exit"]
+    B -->|DAG| D["檢查 Cycle 與 Topological Order"]
+    C --> E["逐 Child 檢查 State Merge"]
     D --> F["逐 Edge 檢查 Relax"]
+    E --> G["保留第一個錯誤 Node"]
+    F --> G
 ```
 
-#### 小型測試
+#### 最小測試
 
-Tree DP：
+Tree：
 
 - 空 Tree。
 - 單一 Node。
 - 兩個 Node。
-- 鏈狀 Tree。
-- 星狀 Tree。
-- 所有 value 都相同。
+- 三個 Node 的 Chain。
+- Star Tree。
+- 所有 Value 為負數、0 或相同值。
+- 深度接近 V 的 Chain。
 
-DAG DP：
+DAG：
 
 - 單一 Node。
-- 一條鏈。
-- 多個 source。
+- 一條 Directed Chain。
+- 多個 Source。
+- 多條路徑匯入同一 Node。
 - 不可達 Node。
-- 有 Cycle 的反例。
-- 多條路徑到同一 Node。
+- Negative Edge Weight。
+- Parallel Edges。
+- 含 Directed Cycle 的反例。
 
-### 43.15 常見問題與判讀
+### 43.16 常見問題與判讀
 
-原始章節的常見問題包含：Parent 與 Child 互相遞迴、選與不選結果錯誤、Parent 在 Child 前計算、DAG DP 讀到未完成 State、Rerooting 仍為 O(V²)。citeturn44search1
+| 現象 | 可能原因 | 第一輪檢查 |
+|---|---|---|
+| Parent 與 Child 互相遞迴 | 無向 Tree 未排除 Parent | 傳入 `parent` 或使用 `visited` |
+| 選與不選結果錯誤 | State 沒有區分目前 Node 狀態 | 檢查 Parent 是否需要知道 Child 有沒有選 |
+| Parent 在 Child 前完成 | 合併時機錯誤 | Tree DP 是否在 DFS Exit / Postorder 計算 |
+| Leaf 答案錯誤 | Height、Distance 或空 Subtree 定義不一致 | 明確使用 Edge 數或 Node 數 |
+| Rerooting 仍是 O(V²) | 對每個 Root 重新完整 DFS | 重用 Subtree 與外部貢獻 |
+| Rerooting 某些 Node 錯誤 | 移除與加入的貢獻數量有誤 | 逐 Edge 驗證 Parent-to-Child 公式 |
+| Recursive Stack Overflow | Tree 太深 | 改用 Iterative Postorder |
+| DAG DP 讀到未完成 State | 未依 Topological Order | 檢查每條 Edge 的順序 |
+| Topological Order 不完整 | Graph 有 Directed Cycle | 確認 Order Size 等於 V |
+| Longest Path 從不可達點延伸 | Sentinel 未檢查 | Relax 前跳過 `NEG_INF` |
+| 路徑數異常 | Overflow 或 Modulo 遺漏 | 依規格檢查型別與取模 |
+| 路徑數多算 | Parallel Edge 語意未定義 | 確認 Edge 是否視為不同選擇 |
+| 只能得到最佳值，無法還原 | 未保存 Parent / Choice | 在更新最佳值時同步保存來源 |
 
-<table>
-<tr><th>現象</th><th>可能原因</th><th>第一輪檢查</th></tr>
-<tr><td>Parent 與 Child 互相遞迴</td><td>無向 Tree 未排除 Parent</td><td>傳入 parent 或使用 visited</td></tr>
-<tr><td>選與不選結果錯誤</td><td>只定義單一 State</td><td>確認未來是否需知道目前是否已選</td></tr>
-<tr><td>Parent 在 Child 前計算</td><td>計算時機錯誤</td><td>Tree DP 多在 DFS Exit 後組合</td></tr>
-<tr><td>DAG DP 讀到未完成 State</td><td>沒有依 Topological Order</td><td>先確認所有依賴已完成</td></tr>
-<tr><td>Rerooting 仍為 O(V²)</td><td>對每個 Root 重新完整 DFS</td><td>重用 Subtree 與 Parent 貢獻</td></tr>
-<tr><td>Tree DP Stack Overflow</td><td>Tree 太深</td><td>考慮 iterative DFS 或調整環境</td></tr>
-<tr><td>DAG Longest Path 錯誤</td><td>不可達 State 初始化錯</td><td>使用 NEG_INF 並跳過不可達</td></tr>
-<tr><td>路徑數過大</td><td>未取 mod 或 Overflow</td><td>依題目使用 modulo</td></tr>
-<tr><td>Topological Order 不完整</td><td>Graph 有 Directed Cycle</td><td>檢查 order size 是否等於 V</td></tr>
-</table>
+### 43.17 本章檢查表
 
-### 43.16 本章檢查表
+- 我能說明 `dp[node]` 是否包含整棵 Subtree。
+- 我能為 Tree DP 寫出清楚的遞迴函式契約。
+- 我知道 Rooting 如何建立 Parent / Child 關係。
+- 我知道無向 Tree DFS 要排除 Parent。
+- 我能依限制判斷是否需要選 / 不選 State。
+- 我能說明 Tree DP 為何通常先完成 Children。
+- 我能推導 Subtree Size、Height、Diameter 與 Independent Set 的合併方式。
+- 我知道 Height 與 Diameter 必須先決定使用 Edge 數或 Node 數。
+- 我能說明 Rerooting 的 Bottom-up 與 Top-down 兩階段。
+- 我能推導 Root 從 Parent 移到 Child 時的貢獻變化。
+- 我知道 DAG DP 需要完整 Topological Order。
+- 我能使用 Kahn Algorithm 偵測 Directed Cycle。
+- 我能處理 DAG Longest Path 的不可達 State。
+- 我會檢查 Path Count 的 Overflow、Modulo 與 Parallel Edge 語意。
+- 我知道何時要保存 Parent 以進行 Reconstruction。
+- 我會把 Recursive Stack 納入空間複雜度。
+- 我會依每次 Merge 的成本分析，而不是一律寫 O(V + E)。
+- 我能用小型 Tree 或 DAG 找出第一個錯誤 State。
 
-- 我能定義 `dp[node]` 是否包含整棵 Subtree。
-- 我能依 Parent-Child 限制推導 State。
-- 我知道 Tree DP 通常先算 Children。
-- 我能使用 parent 避免無向 Tree 走回上一層。
-- 我能說明選與不選兩個 State。
-- 我知道 Tree Diameter、Height、Subtree Size 的 DP 合併方式。
-- 我知道 Rerooting 會重用相鄰 Root 的結果。
-- 我能說明從 Parent 移到 Child 時哪些貢獻移除、哪些加入。
-- 我知道 DAG DP 需要無 Cycle 與合法計算順序。
-- 我能使用 Topological Order 計算 DAG State。
-- 我會檢查不可達 State、Overflow 與 Cycle。
+### 43.18 本章重點
 
-原始章節檢查表也包含 Subtree State、Parent-Child 限制、先算 Children、使用 parent、選與不選 State、Rerooting、DAG 無 Cycle 與 Topological Order 等項目。citeturn44search1
-
-### 43.17 本章重點
-
-- Tree DP 常以 Subtree 作為 State 範圍。
-- Parent 的答案通常由所有 Child 的答案組成。
-- 若未來合法選擇取決於目前是否選取，就需要分開 State。
-- Tree DP 常在 DFS Exit 時完成 Transition。
-- 無向 Tree 實作時要排除 parent，避免走回上一層。
-- Rerooting 用兩階段傳遞 Subtree 與外部貢獻。
-- DAG DP 依賴無 Cycle，並按照 Topological Order 計算。
-- Tree 與 DAG 的共同核心是先完成依賴 State，再計算目前 State。
+- Tree DP 與 DAG DP 的共同核心，是先完成依賴 State，再計算目前 State。
+- Tree DP 常以整棵 Subtree 作為 State 範圍，而不是只描述單一 Node。
+- Rooting 將無向 Tree 轉成 Parent / Child Dependency。
+- Tree DP 常在 DFS Exit 或 Postorder 合併 Child State。
+- 若 Parent 的合法選擇取決於 Child 是否被選，就需要分開 State。
+- 無向 Tree 必須排除 Parent；輸入若不保證為 Tree，還要另外檢查 Cycle 與連通性。
+- Diameter、Height 與 Distance 必須先固定使用 Edge 數或 Node 數。
+- Rerooting 以 Bottom-up 計算 Subtree，再以 Top-down 傳遞外部貢獻。
+- DAG DP 依賴沒有 Directed Cycle，並使用 Topological Order 安排求值順序。
+- DAG Longest Path 可以處理 Negative Edge，因為沒有 Cycle 且依拓樸順序 Relax。
+- Path Count 的 Base Case、Overflow、Modulo 與 Parallel Edge 語意必須明確。
+- 最佳值不一定足以 Reconstruction，必要時要保存 Parent 或 Choice。
+- 深 Tree 可能造成 Recursive Stack Overflow，可改用 Iterative Postorder。
+- 複雜度取決於 State 數量與 Merge / Transition 成本，不是看到 Tree 或 DAG 就固定為線性。
