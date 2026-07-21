@@ -87,7 +87,6 @@ Pattern 出現在 Index 0 與 Index 3。
 - [48.14 本章檢查表](#4814-本章檢查表)
 - [48.15 本章重點](#4815-本章重點)
 
----
 
 ### 48.1 先把問題說清楚
 
@@ -156,7 +155,6 @@ Index 2：..aa
 
 所有範例都將 `std::string` 視為 Byte / `char` 序列。這適合 ASCII 題目。若需求是完整 Unicode Code Point 或 Grapheme Cluster Matching，需要先使用合適的文字處理方式。
 
----
 
 ### 48.2 先用手找一次
 
@@ -223,7 +221,6 @@ text[5] == pattern[2]   c == c
 
 這就是 Naive Matching。它沒有特殊公式，只是列舉每個可能起點，再逐字比較。
 
----
 
 ### 48.3 Naive Matching
 
@@ -377,7 +374,6 @@ int findFirst(
 
 先寫出正確的 Naive 解法，再決定是否需要最佳化，是合理的解題流程。
 
----
 
 ### 48.4 Naive Matching 為什麼可能慢
 
@@ -426,7 +422,6 @@ KMP 的目標就是保留其中一部分資訊。
 
 KMP 只是利用 Border 決定失敗後還能保留多少匹配。
 
----
 
 ### 48.5 Prefix、Suffix 與 Border
 
@@ -529,7 +524,6 @@ Border 有多個：
 
 這就是 KMP 的核心直覺。
 
----
 
 ### 48.6 Prefix Function：先只理解它記錄什麼
 
@@ -706,7 +700,6 @@ pi[4] = 0
 
 第一次閱讀若還無法自行重寫這段很正常。先確保能拿一個短 Pattern 手算 `pi`，再回來練寫程式。
 
----
 
 ### 48.7 KMP：使用 Prefix Function 搜尋
 
@@ -852,7 +845,6 @@ Text 不回頭，Pattern 使用 Border 決定 matched 回退到哪裡
 
 不要要求自己第一次就同時寫出建表與搜尋。
 
----
 
 ### 48.8 延伸：Rabin-Karp
 
@@ -991,7 +983,6 @@ std::vector<int> rabinKarpSearch(
 
 不用在第一次閱讀時背下整段 Rolling Hash。
 
----
 
 ### 48.9 延伸：Z Algorithm
 
@@ -1166,7 +1157,6 @@ std::vector<int> zSearch(
 - 兩者都能用 Prefix 資訊完成線性搜尋。
 - 不需要第一次就同時熟練兩者。
 
----
 
 ### 48.10 方法選擇
 
@@ -1212,7 +1202,6 @@ O(nm) 能通過嗎？
 - 能：Naive 可能已經足夠。
 - 不能：再選 KMP、Z 或 Hash 方法。
 
----
 
 ### 48.11 常見題型
 
@@ -1270,7 +1259,6 @@ Pattern = "ab"
 
 若要同時搜尋很多 Pattern，可能使用 Trie 或 Aho-Corasick。這不是本章第一次閱讀的重點。
 
----
 
 ### 48.12 固定分析流程
 
@@ -1321,7 +1309,6 @@ pattern = "aaba"
 
 對小型隨機輸入，同時執行 Naive 與進階方法，確認結果相同。
 
----
 
 ### 48.13 常見問題與判讀
 
@@ -1395,7 +1382,6 @@ i - patternLength - 1
 
 必須選擇不會出現在 Pattern 與 Text 中的分隔方式；若輸入可包含任意 Byte，單一 `char` Separator 不一定安全，應改用其他組合方式或 KMP 搜尋流程。
 
----
 
 ### 48.14 本章檢查表
 
@@ -1426,7 +1412,6 @@ i - patternLength - 1
 - 我知道 `z[i]` 表示位置 `i` 與整體 Prefix 的最長匹配長度。
 - 我知道第一次閱讀不需要同時熟練 KMP、Rabin-Karp 與 Z Algorithm。
 
----
 
 ### 48.15 本章重點
 
