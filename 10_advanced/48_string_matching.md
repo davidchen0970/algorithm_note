@@ -2,133 +2,232 @@
 
 ### 適用範圍
 
-本章整理 String Matching 的常見方法，包括問題定義、Naive Matching、KMP、Rabin-Karp、Z Algorithm、複雜度與常見錯誤。原始章節目前是骨架，包含問題定義、KMP、Rabin-Karp、Z Algorithm、複雜度與重點整理，本版會補上完整推導、範例、C++ 實作與判讀流程。citeturn42search1
+本章假設讀者已經會：
 
-String Matching 的核心問題是：
+- `for` 迴圈。
+- 兩層迴圈。
+- `if` 判斷。
+- 使用 Index 讀取 `std::string`。
+- 使用 `std::vector` 保存答案。
+
+不假設讀者已經理解 Prefix Function、Border、Rolling Hash 或 Z Box。本章會先把最直接的 Naive Matching 寫清楚，再從「哪裡重複比較了」逐步走向 KMP。
+
+第一次閱讀不需要同時學會 KMP、Rabin-Karp 與 Z Algorithm。建議分成三輪：
+
+1. 第一輪：只學 Naive Matching，確認自己真的會找 Pattern。
+2. 第二輪：學 Prefix、Suffix、Border 與 KMP。
+3. 第三輪：再把 Rabin-Karp 與 Z Algorithm 當成其他思考方式。
+
+### 這一章真正要解決什麼問題
+
+給定兩個字串：
 
 ```text
-給定 text 與 pattern，找出 pattern 在 text 中出現的位置。
+text    = 很長的原始字串
+pattern = 想尋找的較短字串
 ```
 
-延伸問題包括：
+我們想知道：
 
-- 是否存在匹配。
-- 計算出現次數。
-- 列出所有起始位置。
-- 多個 Pattern 查詢。
-- Prefix / Border / Period 分析。
-- 字串相等性快速比較。
+- Pattern 是否出現在 Text 中？
+- 第一個出現位置在哪裡？
+- 所有出現位置在哪裡？
+- Pattern 出現幾次？
 
-本章聚焦單一 Pattern Matching 的三個主方法：
+例如：
 
-- KMP：利用 Prefix Function 避免重複比較。
-- Rabin-Karp：利用 Rolling Hash 快速比較 Substring。
-- Z Algorithm：計算每個位置與整體字串 Prefix 的最長共同前綴。
-
-```mermaid
-flowchart TD
-    A["String Matching"] --> B{"需要確定性線性時間嗎"}
-    B -->|是| C["KMP / Z Algorithm"]
-    B -->|否，可接受 Hash Collision 風險| D["Rabin-Karp"]
-    A --> E{"只需要單次小資料嗎"}
-    E -->|是| F["Naive Matching"]
-    A --> G{"多 Pattern 嗎"}
-    G -->|是| H["Trie / Aho-Corasick，另章處理"]
+```text
+text    = "abcabc"
+pattern = "abc"
 ```
 
-### 適用讀者
+Pattern 出現在 Index 0 與 Index 3。
 
-- 已會基本 String 與迴圈，但不熟悉線性字串匹配的讀者。
-- 使用 Naive Matching 會超時，想理解 KMP、Rabin-Karp、Z Algorithm 的讀者。
-- 容易混淆 Prefix、Suffix、Border、Prefix Function 與 Z Array 的讀者。
-- 想知道 Hash Collision 與二次驗證關係的讀者。
-- 需要完整 C++ 實作與測試案例的讀者。
+### 閱讀方式
+
+#### 第一輪必讀
+
+- 48.1 問題與規格。
+- 48.2 先用手找一次。
+- 48.3 Naive Matching。
+- 48.4 為什麼 Naive 可能慢。
+
+讀完第一輪後，你應該能獨立寫出正確的 O(nm) 解法。這已經是完整解法，不是失敗版本。
+
+#### 第二輪必讀
+
+- 48.5 Prefix、Suffix 與 Border。
+- 48.6 Prefix Function。
+- 48.7 KMP 搜尋。
+
+讀完第二輪後，再要求自己理解 KMP 如何避免重複比較。
+
+#### 第三輪延伸
+
+- 48.8 Rabin-Karp。
+- 48.9 Z Algorithm。
+
+這兩種方法不是理解 KMP 的前置條件。若第一次看不懂，可以先跳過。
 
 ### 快速導覽
 
-- [48.1 問題定義](#481-問題定義)
-- [48.2 Naive Matching](#482-naive-matching)
-- [48.3 Prefix、Suffix 與 Border](#483-prefixsuffix-與-border)
-- [48.4 KMP 的核心想法](#484-kmp-的核心想法)
-- [48.5 Prefix Function](#485-prefix-function)
-- [48.6 KMP 完整實作](#486-kmp-完整實作)
-- [48.7 Rabin-Karp](#487-rabin-karp)
-- [48.8 Rolling Hash 實作](#488-rolling-hash-實作)
-- [48.9 Z Algorithm 的核心想法](#489-z-algorithm-的核心想法)
-- [48.10 Z Algorithm 完整實作](#4810-z-algorithm-完整實作)
-- [48.11 KMP、Rabin-Karp、Z Algorithm 比較](#4811-kmprabin-karpz-algorithm-比較)
-- [48.12 常見題型](#4812-常見題型)
+- [48.1 先把問題說清楚](#481-先把問題說清楚)
+- [48.2 先用手找一次](#482-先用手找一次)
+- [48.3 Naive Matching](#483-naive-matching)
+- [48.4 Naive Matching 為什麼可能慢](#484-naive-matching-為什麼可能慢)
+- [48.5 Prefix、Suffix 與 Border](#485-prefixsuffix-與-border)
+- [48.6 Prefix Function：先只理解它記錄什麼](#486-prefix-function先只理解它記錄什麼)
+- [48.7 KMP：使用 Prefix Function 搜尋](#487-kmp使用-prefix-function-搜尋)
+- [48.8 延伸：Rabin-Karp](#488-延伸rabin-karp)
+- [48.9 延伸：Z Algorithm](#489-延伸z-algorithm)
+- [48.10 方法選擇](#4810-方法選擇)
+- [48.11 常見題型](#4811-常見題型)
+- [48.12 固定分析流程](#4812-固定分析流程)
 - [48.13 常見問題與判讀](#4813-常見問題與判讀)
 - [48.14 本章檢查表](#4814-本章檢查表)
 - [48.15 本章重點](#4815-本章重點)
 
-### 48.1 問題定義
+---
 
-給定：
+### 48.1 先把問題說清楚
+
+#### 基本範例
 
 ```text
 text    = "ababcabcabababd"
 pattern = "ababd"
 ```
 
-要找出 pattern 在 text 中完整出現的位置。
-
-若從 0-based Index 看，pattern 出現在 text 的 Index 10：
+Pattern 從 Text 的 Index 10 開始完整出現：
 
 ```text
-text:    a b a b c a b c a b a b a b d
-index:   0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
-pattern:                     a  b  a  b  d
+Text Index：  0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+Text：        a b a b c a b c a b  a  b  a  b  d
+Pattern：                         a  b  a  b  d
 ```
 
-常見輸出形式：
+因此第一個匹配位置是 10。
 
-<table>
-<tr><th>輸出需求</th><th>例子</th></tr>
-<tr><td>是否存在</td><td>true / false</td></tr>
-<tr><td>第一個出現位置</td><td>10 或 -1</td></tr>
-<tr><td>全部出現位置</td><td>`[10]`</td></tr>
-<tr><td>出現次數</td><td>1</td></tr>
-</table>
+#### 題目可能要求不同輸出
 
-#### 邊界條件
+同樣是 String Matching，輸出可能是：
 
-String Matching 應先定義：
+- 是否存在：`true` 或 `false`。
+- 第一個位置：例如 10，找不到時回傳 `-1`。
+- 所有位置：例如 `{0, 3}`。
+- 出現次數：例如 2。
 
-- pattern 為空字串時怎麼處理？
-- text 為空字串時怎麼處理？
-- 是否允許重疊匹配？
-- 是否大小寫敏感？
-- 是否只處理 ASCII，還是 Unicode 字元？
+演算法很接近，但找到一次後是否停止會不同。
 
-本章 C++ 範例以 `std::string` 的 byte / char 序列為基礎，不處理 Unicode grapheme cluster 問題。
+#### 先定義空 Pattern
 
-#### 重疊匹配
+不同函式庫或題目可能採用不同定義。本章為了簡化搜尋案例，規定：
 
-例如：
+```text
+pattern 為空時，回傳空的位置集合。
+```
+
+這不是唯一合理規格。實際題目若另有定義，應依題目調整。
+
+#### 是否允許重疊
 
 ```text
 text    = "aaaa"
 pattern = "aa"
 ```
 
-若允許重疊，匹配位置是：
+允許重疊時，位置是：
 
 ```text
 0, 1, 2
 ```
 
-若不允許重疊，可能只取：
+因為：
 
 ```text
-0, 2
+Index 0：aa..
+Index 1：.aa.
+Index 2：..aa
 ```
 
-演算法實作前應先確認題目需求。本章預設列出所有重疊匹配。
+本章預設列出所有重疊匹配。
 
-### 48.2 Naive Matching
+#### 本章的字元單位
 
-Naive Matching 枚舉 pattern 在 text 中的每個可能起點，再逐字比較。
+所有範例都將 `std::string` 視為 Byte / `char` 序列。這適合 ASCII 題目。若需求是完整 Unicode Code Point 或 Grapheme Cluster Matching，需要先使用合適的文字處理方式。
+
+---
+
+### 48.2 先用手找一次
+
+先不要想 KMP。
+
+```text
+text    = "abcabc"
+pattern = "abc"
+```
+
+Pattern 長度是 3，Text 長度是 6。
+
+可能的起點只有：
+
+```text
+0, 1, 2, 3
+```
+
+為什麼沒有 4 和 5？
+
+因為從 4 或 5 開始，剩餘長度不足以放下長度 3 的 Pattern。
+
+#### 起點 0
+
+```text
+text[0] == pattern[0]   a == a
+text[1] == pattern[1]   b == b
+text[2] == pattern[2]   c == c
+```
+
+全部相同，所以記錄 0。
+
+#### 起點 1
+
+```text
+text[1] == pattern[0]   b != a
+```
+
+第一個字元就不同，不必繼續比較。
+
+#### 起點 2
+
+```text
+text[2] == pattern[0]   c != a
+```
+
+失敗。
+
+#### 起點 3
+
+```text
+text[3] == pattern[0]   a == a
+text[4] == pattern[1]   b == b
+text[5] == pattern[2]   c == c
+```
+
+全部相同，所以記錄 3。
+
+答案是：
+
+```text
+0, 3
+```
+
+這就是 Naive Matching。它沒有特殊公式，只是列舉每個可能起點，再逐字比較。
+
+---
+
+### 48.3 Naive Matching
+
+#### 先寫最基本版本
 
 ```cpp
 #include <string>
@@ -171,133 +270,357 @@ std::vector<int> naiveSearch(
 }
 ```
 
-#### 複雜度
+#### 外層迴圈在做什麼
 
-```text
-起點數量約 O(n)
-每個起點最多比較 O(m)
-總時間 O(nm)
-額外空間 O(1)，不含輸出
+```cpp
+for (int start = 0; start + m <= n; ++start)
 ```
 
-#### Naive Matching 適用情況
+`start` 表示 Pattern 嘗試放在 Text 的哪個起點。
 
-- text 與 pattern 很短。
-- 只需要快速寫出 Oracle。
-- 用於對拍 KMP、Rabin-Karp 或 Z Algorithm。
+條件：
+
+```cpp
+start + m <= n
+```
+
+表示從 `start` 開始，後方至少還有 `m` 個字元可比較。
+
+也可以寫成：
+
+```cpp
+start <= n - m
+```
+
+但只有在先確認 `m <= n` 且型別不會產生 Unsigned Underflow 時才適合。`start + m <= n` 在目前的 `int` 寫法中較直觀。
+
+#### 內層迴圈在做什麼
+
+```cpp
+for (int j = 0; j < m; ++j)
+```
+
+`j` 表示目前比較 Pattern 的第幾個字元。
+
+對應的 Text 位置是：
+
+```cpp
+start + j
+```
+
+所以比較：
+
+```cpp
+text[start + j] != pattern[j]
+```
+
+#### 為什麼不同時可以 `break`
+
+只要有一個位置不同，整個 Pattern 就不可能在這個起點完整匹配。
+
+因此不必比較剩下內容。
+
+#### 若只需要第一個位置
+
+```cpp
+#include <string>
+
+int findFirst(
+    const std::string& text,
+    const std::string& pattern)
+{
+    if (pattern.empty())
+    {
+        return 0;
+    }
+
+    const int n = static_cast<int>(text.size());
+    const int m = static_cast<int>(pattern.size());
+
+    for (int start = 0; start + m <= n; ++start)
+    {
+        int j = 0;
+
+        while (j < m &&
+               text[start + j] == pattern[j])
+        {
+            ++j;
+        }
+
+        if (j == m)
+        {
+            return start;
+        }
+    }
+
+    return -1;
+}
+```
+
+#### 複雜度
+
+若 Text 長度為 `n`，Pattern 長度為 `m`：
+
+- 可能起點約有 O(n) 個。
+- 每個起點最多比較 O(m) 次。
+- 最差時間是 O(nm)。
+- 不含輸出時，額外空間是 O(1)。
+
+#### Naive 並不是不好的解法
+
+適合使用它的情況：
+
+- 輸入很短。
 - 題目限制允許 O(nm)。
+- 想先確保邏輯正確。
+- 想用它測試 KMP 或其他進階方法。
 
-#### Naive Matching 的瓶頸
+先寫出正確的 Naive 解法，再決定是否需要最佳化，是合理的解題流程。
 
-若比較失敗後，下一個起點又從 pattern[0] 開始比，會重複比較很多已知資訊。
+---
 
-例如：
+### 48.4 Naive Matching 為什麼可能慢
+
+考慮：
 
 ```text
 text    = "aaaaaaaaab"
 pattern = "aaaab"
 ```
 
-很多起點都會比到很後面才失敗，造成接近 O(nm)。
+在起點 0：
 
-### 48.3 Prefix、Suffix 與 Border
+```text
+a == a
+a == a
+a == a
+a == a
+a != b
+```
 
-理解 KMP 與 Z Algorithm 前，先整理幾個名詞。
+比較到很後面才失敗。
+
+移到起點 1 後，又會重新比較大量 `a`：
+
+```text
+a == a
+a == a
+a == a
+a == a
+a != b
+```
+
+問題不是比較本身，而是：
+
+> 失敗後完全忘記前面已經知道的 Pattern 結構。
+
+KMP 的目標就是保留其中一部分資訊。
+
+#### 暫時不要急著看 KMP 程式
+
+在進入 KMP 前，先建立三個詞：
+
+- Prefix：從開頭開始。
+- Suffix：到結尾結束。
+- Border：同時是 Prefix 與 Suffix。
+
+KMP 只是利用 Border 決定失敗後還能保留多少匹配。
+
+---
+
+### 48.5 Prefix、Suffix 與 Border
 
 #### Prefix
 
-Prefix 是從字串開頭開始的一段。
+Prefix 必須從字串開頭開始。
+
+對：
 
 ```text
 s = "abcab"
-prefixes: "a", "ab", "abc", "abca", "abcab"
+```
+
+Prefix 有：
+
+```text
+"a"
+"ab"
+"abc"
+"abca"
+"abcab"
 ```
 
 #### Suffix
 
-Suffix 是到字串結尾結束的一段。
+Suffix 必須在字串結尾結束。
 
 ```text
-s = "abcab"
-suffixes: "b", "ab", "cab", "bcab", "abcab"
+"b"
+"ab"
+"cab"
+"bcab"
+"abcab"
+```
+
+#### Proper Prefix 與 Proper Suffix
+
+Proper 表示不包含整個字串本身。
+
+對 `"abab"`：
+
+```text
+Proper Prefix："a", "ab", "aba"
+Proper Suffix："b", "ab", "bab"
 ```
 
 #### Border
 
-Border 是同時為 Prefix 與 Suffix 的字串，但通常不包含整個字串本身。
+Border 是同時為 Proper Prefix 與 Proper Suffix 的內容。
+
+對 `"abab"`：
 
 ```text
-s = "abab"
-proper prefixes: "a", "ab", "aba"
-proper suffixes: "b", "ab", "bab"
-border: "ab"
+"ab"
 ```
 
-KMP 的 Prefix Function 保存的就是每個前綴的最長 Border 長度。
-
-```mermaid
-flowchart TD
-    A["pattern 已匹配前綴"] --> B["失敗時找最長 Border"]
-    B --> C["保留可重用的匹配長度"]
-    C --> D["避免從 0 重新比較"]
-```
-
-### 48.4 KMP 的核心想法
-
-KMP，全名 Knuth-Morris-Pratt Algorithm，用 Prefix Function 避免重複比較。
-
-當目前已匹配 pattern 的前 j 個字元，但下一個字元失敗時：
+同時在開頭與結尾出現，因此是 Border。
 
 ```text
-pattern[0..j-1] 已匹配
-pattern[j] 失敗
+字串：  a b a b
+Prefix：a b
+Suffix：    a b
 ```
 
-KMP 不把 j 直接歸 0，而是找到目前已匹配字串的最長 Border。這代表某段 Prefix 也同時是 Suffix，可以保留下來繼續比較。
+#### 再看 `"aaaa"`
 
-#### 例子
+Proper Prefix：
 
 ```text
-pattern = "ababd"
+"a", "aa", "aaa"
 ```
 
-若已匹配：
+Proper Suffix：
+
+```text
+"a", "aa", "aaa"
+```
+
+Border 有多個：
+
+```text
+"a", "aa", "aaa"
+```
+
+最長 Border 長度是 3。
+
+#### Border 和 KMP 有什麼關係
+
+假設目前已經匹配：
 
 ```text
 "abab"
 ```
 
-失敗時，`"abab"` 的最長 Border 是 `"ab"`，長度 2。因此可以把目前匹配長度 j 從 4 回退到 2，而不是 0。
+下一個字元卻失敗。
 
-#### KMP 的兩個階段
+由於 `"abab"` 的結尾 `"ab"` 同時也是 Pattern 的開頭 `"ab"`，這兩個字元仍可能作為下一次匹配的開頭，不必全部丟掉。
 
-1. 對 pattern 建立 Prefix Function。
-2. 掃描 text，使用 Prefix Function 控制匹配長度回退。
+因此匹配長度可以從 4 回到 2，而不是回到 0。
 
-### 48.5 Prefix Function
+這就是 KMP 的核心直覺。
 
-Prefix Function `pi[i]` 表示：
+---
+
+### 48.6 Prefix Function：先只理解它記錄什麼
+
+#### `pi[i]` 的意思
+
+`pi[i]` 表示：
 
 ```text
-pattern[0..i] 這個前綴中，最長 proper border 的長度。
+pattern[0..i] 的最長 Border 長度
 ```
 
 例如：
 
 ```text
 pattern = "ababd"
-index:     0 1 2 3 4
-char:      a b a b d
-pi:        0 0 1 2 0
+Index：     0 1 2 3 4
+字元：      a b a b d
+pi：        0 0 1 2 0
 ```
 
-#### 建立 Prefix Function
+逐格理解：
+
+- `i = 0`，字串是 `"a"`，沒有 Proper Border，所以是 0。
+- `i = 1`，字串是 `"ab"`，沒有 Border，所以是 0。
+- `i = 2`，字串是 `"aba"`，開頭與結尾都有 `"a"`，所以是 1。
+- `i = 3`，字串是 `"abab"`，最長 Border 是 `"ab"`，所以是 2。
+- `i = 4`，字串是 `"ababd"`，沒有 Border，所以是 0。
+
+第一輪先確定看懂這張表，不需要立即自己寫出建立流程。
+
+#### 先用慢方法建立 `pi`
+
+下面的版本不是最有效率，但比較符合定義：對每個結尾位置，嘗試所有可能 Border 長度。
 
 ```cpp
 #include <string>
 #include <vector>
 
-std::vector<int> buildPrefixFunction(const std::string& pattern)
+std::vector<int> buildPrefixFunctionSlow(
+    const std::string& pattern)
+{
+    const int m = static_cast<int>(pattern.size());
+    std::vector<int> pi(m, 0);
+
+    for (int end = 0; end < m; ++end)
+    {
+        const int currentLength = end + 1;
+
+        for (int length = currentLength - 1;
+             length >= 1;
+             --length)
+        {
+            bool same = true;
+
+            for (int j = 0; j < length; ++j)
+            {
+                const int suffixStart =
+                    currentLength - length;
+
+                if (pattern[j] !=
+                    pattern[suffixStart + j])
+                {
+                    same = false;
+                    break;
+                }
+            }
+
+            if (same)
+            {
+                pi[end] = length;
+                break;
+            }
+        }
+    }
+
+    return pi;
+}
+```
+
+這個版本的目的，是把「最長 Prefix 等於 Suffix」直接寫成程式。
+
+#### 再看線性版本
+
+理解 `pi` 的含義後，再看正式版本：
+
+```cpp
+#include <string>
+#include <vector>
+
+std::vector<int> buildPrefixFunction(
+    const std::string& pattern)
 {
     const int m = static_cast<int>(pattern.size());
     std::vector<int> pi(m, 0);
@@ -306,7 +629,8 @@ std::vector<int> buildPrefixFunction(const std::string& pattern)
     {
         int length = pi[i - 1];
 
-        while (length > 0 && pattern[i] != pattern[length])
+        while (length > 0 &&
+               pattern[i] != pattern[length])
         {
             length = pi[length - 1];
         }
@@ -323,15 +647,101 @@ std::vector<int> buildPrefixFunction(const std::string& pattern)
 }
 ```
 
-#### Invariant
+#### 每個變數代表什麼
 
-處理位置 i 時，`length` 表示目前考慮的 Border 長度。若 `pattern[i]` 無法延伸這個 Border，就持續回退到更短 Border。
+- `i`：目前要加入 Pattern Prefix 的新位置。
+- `length`：目前嘗試延伸的 Border 長度。
+- `pattern[length]`：若目前 Border 可以延伸，下一個應匹配的位置。
+
+#### 為什麼失敗時是 `pi[length - 1]`
+
+如果長度為 `length` 的 Border 無法加上目前字元，就改試這個 Border 自己的最長 Border。
+
+```cpp
+length = pi[length - 1];
+```
+
+這不是隨意減一，而是跳到「下一個仍有可能成立的 Border 長度」。
+
+#### 用 `"ababd"` 看幾個位置
+
+在 `i = 2`：
+
+```text
+目前字元 pattern[2] = 'a'
+length = pi[1] = 0
+比較 pattern[2] 與 pattern[0]
+'a' == 'a'
+length 變成 1
+pi[2] = 1
+```
+
+在 `i = 3`：
+
+```text
+目前字元 pattern[3] = 'b'
+length = pi[2] = 1
+比較 pattern[3] 與 pattern[1]
+'b' == 'b'
+length 變成 2
+pi[3] = 2
+```
+
+在 `i = 4`：
+
+```text
+目前字元 pattern[4] = 'd'
+length = pi[3] = 2
+比較 pattern[4] 與 pattern[2]
+'d' != 'a'
+回退到 pi[1] = 0
+再比較 pattern[4] 與 pattern[0]
+'d' != 'a'
+pi[4] = 0
+```
 
 #### 複雜度
 
-雖然有 while，但 length 每次回退會變小，整體建立 Prefix Function 是 O(m)。
+線性版本是 O(m)。雖然裡面有 `while`，但 `length` 在回退時會快速減小，整體不會對每個 `i` 都重新掃描完整 Pattern。
 
-### 48.6 KMP 完整實作
+第一次閱讀若還無法自行重寫這段很正常。先確保能拿一個短 Pattern 手算 `pi`，再回來練寫程式。
+
+---
+
+### 48.7 KMP：使用 Prefix Function 搜尋
+
+#### KMP 需要記住的狀態
+
+掃描 Text 時，只需要記錄：
+
+```text
+matched = 目前已經匹配 Pattern 前幾個字元
+```
+
+例如：
+
+```text
+matched = 3
+```
+
+表示 Pattern 的：
+
+```text
+pattern[0], pattern[1], pattern[2]
+```
+
+已經與目前 Text 結尾對上，下一個想比較 `pattern[3]`。
+
+#### 先看主要流程
+
+對每個 `text[i]`：
+
+1. 如果與下一個 Pattern 字元不同，就依 `pi` 回退 `matched`。
+2. 如果相同，就讓 `matched` 加一。
+3. 如果 `matched == pattern.size()`，代表找到完整匹配。
+4. 記錄答案後，依 `pi` 回退，以保留重疊匹配的可能。
+
+#### 完整程式
 
 ```cpp
 #include <string>
@@ -348,15 +758,17 @@ std::vector<int> kmpSearch(
         return positions;
     }
 
-    const std::vector<int> pi = buildPrefixFunction(pattern);
+    const std::vector<int> pi =
+        buildPrefixFunction(pattern);
+
     const int n = static_cast<int>(text.size());
     const int m = static_cast<int>(pattern.size());
-
     int matched = 0;
 
     for (int i = 0; i < n; ++i)
     {
-        while (matched > 0 && text[i] != pattern[matched])
+        while (matched > 0 &&
+               text[i] != pattern[matched])
         {
             matched = pi[matched - 1];
         }
@@ -377,69 +789,111 @@ std::vector<int> kmpSearch(
 }
 ```
 
-#### 為什麼找到一次後要回退
+#### 為什麼起點是 `i - m + 1`
 
-若允許重疊匹配，找到一次後不能直接把 `matched` 設成 0，而應回退到 `pi[m - 1]`。
+找到時，`i` 是匹配最後一個字元的位置。
 
-例如：
+若 Pattern 長度是 `m`：
+
+```text
+起點 = 終點 - 長度 + 1
+```
+
+所以：
+
+```cpp
+i - m + 1
+```
+
+#### 找到後為什麼不把 `matched` 設成 0
 
 ```text
 text    = "aaaa"
 pattern = "aa"
 ```
 
-匹配位置應為 0、1、2。
+找到 Index 0 的 `"aa"` 後，最後一個 `a` 仍可能是下一個匹配的第一個 `a`。
+
+Pattern `"aa"` 的最長 Border 是 `"a"`，長度 1。因此：
+
+```cpp
+matched = pi[matched - 1];
+```
+
+會保留 1，接著能找到位置 1 與 2。
+
+#### KMP 與 Naive 的差異
+
+Naive 失敗時：
+
+```text
+移動起點，Pattern 從 0 重新比較
+```
+
+KMP 失敗時：
+
+```text
+Text 不回頭，Pattern 使用 Border 決定 matched 回退到哪裡
+```
 
 #### 複雜度
 
+- 建立 Prefix Function：O(m)。
+- 掃描 Text：O(n)。
+- 總時間：O(n + m)。
+- 額外空間：O(m)，不含輸出。
+
+#### 如果現在還寫不出 KMP
+
+先分成兩個小目標：
+
+1. 給一個 Pattern，手算 `pi`。
+2. 給定已經算好的 `pi`，追蹤 `matched` 如何變化。
+
+不要要求自己第一次就同時寫出建表與搜尋。
+
+---
+
+### 48.8 延伸：Rabin-Karp
+
+> 第一次閱讀可以跳過。本節需要 Modulo 與 Hash 的基本觀念。
+
+#### 核心直覺
+
+Naive Matching 逐字比較每個長度為 `m` 的 Window。Rabin-Karp 則先為 Pattern 與 Window 計算數值摘要，也就是 Hash。
+
 ```text
-Prefix Function：O(m)
-掃描 text：O(n)
-總時間：O(n + m)
-額外空間：O(m)，不含輸出
+Hash 不同：一定不相同
+Hash 相同：可能相同，仍可能發生 Collision
 ```
 
-### 48.7 Rabin-Karp
+Hash Collision 表示不同字串算出相同 Hash。
 
-Rabin-Karp 使用 Rolling Hash 將字串片段轉成 Hash 值。若 pattern 的 Hash 與某個 text 子字串 Hash 相同，就可能匹配。
+因此若答案必須完全正確，Hash 相同後還要逐字驗證。
 
-#### 核心想法
+#### 先看簡化流程
 
 ```text
-hash(pattern) == hash(text[start..start+m))
+計算 Pattern Hash
+計算第一個 Window Hash
+對每個 Window：
+    Hash 相同嗎？
+        否：移到下一個 Window
+        是：逐字驗證
+    更新成下一個 Window Hash
 ```
 
-若 Hash 不同，必定不匹配。若 Hash 相同，可能匹配，也可能是 Collision。
+#### Rolling Hash 的目的
 
-因此 Rabin-Karp 通常需要二次驗證，特別是在要求確定正確答案時。
+從一個 Window 移到下一個時，不重新計算全部 `m` 個字元，而是：
 
-```mermaid
-flowchart TD
-    A["計算 pattern hash"] --> B["滑動 text window"]
-    B --> C{"hash 相同嗎"}
-    C -->|否| B
-    C -->|是| D["逐字驗證避免 Collision"]
-    D --> E{"真的相同嗎"}
-    E -->|是| F["記錄匹配位置"]
-    E -->|否| B
-```
+1. 移除最左字元的影響。
+2. 將其餘內容向前移位。
+3. 加入新的右端字元。
 
-#### 適用情況
+這就是 Rolling 的意思。
 
-- 多 Pattern 或多次 Substring 比較的基礎。
-- 需要快速比較等長 Substring。
-- 可接受 Hash Collision 風險，或會做二次驗證。
-- 搭配 Double Hash 降低 Collision 機率。
-
-#### 注意
-
-- Hash Collision 是 Rabin-Karp 的核心風險。
-- 若用單一 mod，理論上仍可能誤判。
-- 若要求完全正確，Hash 相同後需實際比較字串。
-
-### 48.8 Rolling Hash 實作
-
-以下實作使用單一 mod，並在 Hash 相同後逐字驗證，確保答案正確。
+#### 一個完整版本
 
 ```cpp
 #include <string>
@@ -464,21 +918,26 @@ std::vector<int> rabinKarpSearch(
         return positions;
     }
 
-    const long long base = 911382323;
+    const long long base = 256;
     const long long mod = 1'000'000'007;
-
     long long patternHash = 0;
     long long windowHash = 0;
     long long highestPower = 1;
 
     for (int i = 0; i < m; ++i)
     {
-        patternHash = (patternHash * base + static_cast<unsigned char>(pattern[i])) % mod;
-        windowHash = (windowHash * base + static_cast<unsigned char>(text[i])) % mod;
+        patternHash =
+            (patternHash * base +
+             static_cast<unsigned char>(pattern[i])) % mod;
+
+        windowHash =
+            (windowHash * base +
+             static_cast<unsigned char>(text[i])) % mod;
 
         if (i + 1 < m)
         {
-            highestPower = highestPower * base % mod;
+            highestPower =
+                highestPower * base % mod;
         }
     }
 
@@ -505,9 +964,17 @@ std::vector<int> rabinKarpSearch(
 
         if (start + m < n)
         {
-            long long remove = static_cast<unsigned char>(text[start]) * highestPower % mod;
-            windowHash = (windowHash - remove + mod) % mod;
-            windowHash = (windowHash * base + static_cast<unsigned char>(text[start + m])) % mod;
+            const long long removed =
+                static_cast<unsigned char>(text[start])
+                * highestPower % mod;
+
+            windowHash =
+                (windowHash - removed + mod) % mod;
+
+            windowHash =
+                (windowHash * base +
+                 static_cast<unsigned char>(text[start + m]))
+                % mod;
         }
     }
 
@@ -515,62 +982,112 @@ std::vector<int> rabinKarpSearch(
 }
 ```
 
-#### 複雜度
+#### 目前只需要記住
 
-若 Hash 相同時都做二次驗證，最差仍可能 O(nm)，但平均情況通常接近 O(n + m)。若不做驗證，時間可接近 O(n + m)，但會有 Collision 造成錯誤的風險。
+- Hash 不同可以快速排除。
+- Hash 相同不保證字串相同。
+- 要求完全正確時，Hash 相同後逐字確認。
+- 更新 Window Hash 時要避免負數。
 
-#### 常見錯誤
+不用在第一次閱讀時背下整段 Rolling Hash。
 
-- 減去舊字元後沒有加回 mod，導致負數。
-- `char` 是 signed 時導致負值，建議轉成 `unsigned char`。
-- 忘記處理 pattern 比 text 長。
-- Hash 相同後沒有驗證，卻聲稱答案一定正確。
+---
 
-### 48.9 Z Algorithm 的核心想法
+### 48.9 延伸：Z Algorithm
 
-Z Algorithm 對字串 s 計算 Z Array：
+> 第一次閱讀可以跳過。本節是另一種利用 Prefix 資訊的方法。
+
+#### `z[i]` 的意思
 
 ```text
-z[i] = s[i..] 與 s[0..] 的最長共同前綴長度
+z[i] = 從位置 i 開始的內容，與整個字串 Prefix
+       最多連續相同幾個字元
 ```
 
 例如：
 
 ```text
 s = "ababa"
-z = [0, 0, 3, 0, 1]
 ```
 
-`z[2] = 3`，因為：
+從 Index 2 開始：
 
 ```text
 s[2..] = "aba"
-s[0..] = "aba"
+Prefix = "aba"
 ```
 
-#### 用 Z Algorithm 做 Pattern Matching
-
-將 pattern、分隔符、text 串接：
+前 3 個字元相同，所以：
 
 ```text
-combined = pattern + '#' + text
+z[2] = 3
 ```
 
-若某個位置 i 的 `z[i] >= pattern.size()`，表示從 text 對應位置開始匹配 pattern。
+Z Array 為：
 
-分隔符必須是 pattern 與 text 中不會出現的字元。
+```text
+[0, 0, 3, 0, 1]
+```
 
-### 48.10 Z Algorithm 完整實作
+#### 如何拿來搜尋 Pattern
+
+將三段串起來：
+
+```text
+pattern + separator + text
+```
+
+例如：
+
+```text
+pattern = "aba"
+text    = "ababa"
+combined = "aba#ababa"
+```
+
+若 Text 對應位置的 Z 值至少等於 Pattern 長度，就代表 Pattern 在該位置完整匹配。
+
+Separator 必須是不會出現在 Pattern 與 Text 中的字元。
+
+#### 先看直接建立 Z Array 的慢版本
 
 ```cpp
 #include <string>
 #include <vector>
 
-std::vector<int> buildZArray(const std::string& s)
+std::vector<int> buildZArraySlow(
+    const std::string& text)
 {
-    const int n = static_cast<int>(s.size());
+    const int n = static_cast<int>(text.size());
     std::vector<int> z(n, 0);
 
+    for (int i = 1; i < n; ++i)
+    {
+        while (i + z[i] < n &&
+               text[z[i]] == text[i + z[i]])
+        {
+            ++z[i];
+        }
+    }
+
+    return z;
+}
+```
+
+這個版本直接依定義比較，最差可能是 O(n²)，但容易理解 `z[i]` 在算什麼。
+
+#### 線性版本
+
+```cpp
+#include <algorithm>
+#include <string>
+#include <vector>
+
+std::vector<int> buildZArray(
+    const std::string& text)
+{
+    const int n = static_cast<int>(text.size());
+    std::vector<int> z(n, 0);
     int left = 0;
     int right = 0;
 
@@ -578,10 +1095,13 @@ std::vector<int> buildZArray(const std::string& s)
     {
         if (i < right)
         {
-            z[i] = std::min(right - i, z[i - left]);
+            z[i] = std::min(
+                right - i,
+                z[i - left]);
         }
 
-        while (i + z[i] < n && s[z[i]] == s[i + z[i]])
+        while (i + z[i] < n &&
+               text[z[i]] == text[i + z[i]])
         {
             ++z[i];
         }
@@ -595,6 +1115,15 @@ std::vector<int> buildZArray(const std::string& s)
 
     return z;
 }
+```
+
+`[left, right)` 表示目前已知和 Prefix 相同、而且延伸最右的區間。位置 `i` 落在區間內時，可以先重用已知結果，再向右繼續比較。
+
+#### 搜尋 Pattern
+
+```cpp
+#include <string>
+#include <vector>
 
 std::vector<int> zSearch(
     const std::string& text,
@@ -608,12 +1137,17 @@ std::vector<int> zSearch(
     }
 
     const char separator = '#';
-    std::string combined = pattern + separator + text;
-    std::vector<int> z = buildZArray(combined);
+    const std::string combined =
+        pattern + separator + text;
+
+    const std::vector<int> z =
+        buildZArray(combined);
 
     const int m = static_cast<int>(pattern.size());
 
-    for (int i = m + 1; i < static_cast<int>(combined.size()); ++i)
+    for (int i = m + 1;
+         i < static_cast<int>(combined.size());
+         ++i)
     {
         if (z[i] >= m)
         {
@@ -625,109 +1159,285 @@ std::vector<int> zSearch(
 }
 ```
 
-#### Z Box Invariant
+#### 目前只需要記住
 
-Z Algorithm 維護一段 `[left, right)`，表示目前已知與 Prefix 匹配的最右區間。當 i 落在這段內，可以重用之前算過的 Z 值。
+- KMP 的 `pi` 問「每個 Prefix 的最長 Border」。
+- Z Array 問「每個位置和整體 Prefix 相同多長」。
+- 兩者都能用 Prefix 資訊完成線性搜尋。
+- 不需要第一次就同時熟練兩者。
 
-```mermaid
-flowchart TD
-    A["Prefix"] --> B["Z Box [left, right)"]
-    B --> C["i 在 box 內時重用資訊"]
-    C --> D["再向右延伸比較"]
-```
+---
 
-#### 複雜度
+### 48.10 方法選擇
+
+#### 使用 Naive Matching
+
+當：
+
+- 資料規模小。
+- 想先寫出正確答案。
+- 想建立測試基準。
+
+#### 使用 KMP
+
+當：
+
+- 單一 Pattern 搜尋。
+- 需要確定性的 O(n + m)。
+- 題目涉及 Border、Prefix Function 或重複結構。
+
+#### 使用 Rabin-Karp
+
+當：
+
+- 題目自然適合 Hash。
+- 需要多次比較等長 Substring。
+- 願意處理 Collision，或會在 Hash 相同後驗證。
+
+#### 使用 Z Algorithm
+
+當：
+
+- 題目大量詢問各位置和 Prefix 的匹配長度。
+- 問題與 Prefix Match、Border 或週期結構密切相關。
+
+#### 不要看到 String Matching 就一次使用全部方法
+
+先看限制：
 
 ```text
-建立 Z Array：O(n)
-Pattern Matching：O(n + m)
-額外空間：O(n + m)
+O(nm) 能通過嗎？
 ```
 
-### 48.11 KMP、Rabin-Karp、Z Algorithm 比較
+- 能：Naive 可能已經足夠。
+- 不能：再選 KMP、Z 或 Hash 方法。
 
-<table>
-<tr><th>方法</th><th>時間</th><th>空間</th><th>優點</th><th>注意事項</th></tr>
-<tr><td>Naive</td><td>O(nm)</td><td>O(1)</td><td>最容易寫，可作 Oracle</td><td>大資料可能超時</td></tr>
-<tr><td>KMP</td><td>O(n + m)</td><td>O(m)</td><td>確定性線性時間</td><td>Prefix Function 較容易寫錯</td></tr>
-<tr><td>Rabin-Karp</td><td>平均接近 O(n + m)</td><td>O(1)</td><td>適合 Hash 型比較</td><td>Collision，需驗證或 Double Hash</td></tr>
-<tr><td>Z Algorithm</td><td>O(n + m)</td><td>O(n + m)</td><td>概念統一，Prefix 類問題好用</td><td>需處理 separator</td></tr>
-</table>
+---
 
-#### 選擇建議
+### 48.11 常見題型
 
-- 只做小資料或當 Oracle：Naive。
-- 需要確定性單 Pattern Matching：KMP 或 Z Algorithm。
-- 需要許多 Substring Hash 比較：Rabin-Karp / Rolling Hash。
-- 題目涉及 Prefix match、Border、重複結構：KMP 或 Z Algorithm。
+#### 判斷 Pattern 是否存在
 
-### 48.12 常見題型
+- 小資料：Naive 或 `std::string::find`。
+- 大資料且需要確定性線性時間：KMP 或 Z Algorithm。
 
-#### 找 pattern 所有出現位置
+#### 找所有出現位置
 
+- Naive。
 - KMP。
 - Z Algorithm。
-- Rabin-Karp + 驗證。
-
-#### 判斷字串是否由重複 Pattern 組成
-
-可用 Prefix Function：
-
-```text
-若 n % (n - pi[n-1]) == 0，則可由長度 n - pi[n-1] 的 pattern 重複組成。
-```
-
-前提是 `pi[n-1] > 0`。
+- Rabin-Karp 加二次驗證。
 
 #### 最長 Border
 
-- Prefix Function 的最後一格。
-- Z Algorithm 也可處理。
+Prefix Function 最後一格：
 
-#### 多次 Substring 相等查詢
+```cpp
+pi.back()
+```
 
-- Rolling Hash。
-- Suffix Array / LCP，較進階。
+前提是字串非空。
+
+#### 判斷是否由重複 Pattern 組成
+
+若字串長度為 `n`，且：
+
+```text
+borderLength = pi[n - 1]
+periodLength = n - borderLength
+```
+
+若：
+
+```text
+borderLength > 0
+n % periodLength == 0
+```
+
+則字串可由長度 `periodLength` 的 Prefix 重複形成。
+
+第一次看到這個性質時，可以先用 `"ababab"` 驗證：
+
+```text
+n = 6
+最長 Border = "abab"，長度 4
+periodLength = 6 - 4 = 2
+6 % 2 == 0
+Pattern = "ab"
+```
 
 #### 多 Pattern Matching
 
-- Trie。
-- Aho-Corasick，另章處理。
+若要同時搜尋很多 Pattern，可能使用 Trie 或 Aho-Corasick。這不是本章第一次閱讀的重點。
+
+---
+
+### 48.12 固定分析流程
+
+#### 第一步：定義輸出
+
+- 是否存在？
+- 第一個位置？
+- 所有位置？
+- 出現次數？
+
+#### 第二步：定義邊界
+
+- 空 Pattern 如何處理？
+- Pattern 比 Text 長時怎麼辦？
+- 是否允許重疊？
+- 是否區分大小寫？
+- 處理 Byte、ASCII 還是 Unicode 文字單位？
+
+#### 第三步：先寫 Naive
+
+先列舉起點，再逐字比較。
+
+如果限制允許 O(nm)，可以直接完成。
+
+#### 第四步：確認瓶頸
+
+若大量起點都比較到很後面才失敗，Naive 可能重複比較。
+
+#### 第五步：選擇重用資訊的方法
+
+- 重用 Border：KMP。
+- 重用 Prefix Match 區間：Z Algorithm。
+- 重用 Window Hash：Rabin-Karp。
+
+#### 第六步：使用短字串手動追蹤
+
+KMP 不要先用很長範例。先使用：
+
+```text
+pattern = "abab"
+pattern = "aaaa"
+pattern = "aaba"
+```
+
+手算 `pi` 後再看程式。
+
+#### 第七步：用 Naive 做測試基準
+
+對小型隨機輸入，同時執行 Naive 與進階方法，確認結果相同。
+
+---
 
 ### 48.13 常見問題與判讀
 
-<table>
-<tr><th>現象</th><th>可能原因</th><th>第一輪檢查</th></tr>
-<tr><td>KMP 漏掉重疊匹配</td><td>找到後 matched 設成 0</td><td>改成 `matched = pi[matched - 1]`</td></tr>
-<tr><td>Prefix Function 全部偏小</td><td>回退邏輯錯誤</td><td>檢查 `length = pi[length - 1]`</td></tr>
-<tr><td>Rabin-Karp 偶爾誤判</td><td>Hash Collision</td><td>Hash 相同後逐字驗證</td></tr>
-<tr><td>Rolling Hash 變負數</td><td>減法後未正規化</td><td>`(x - y + mod) % mod`</td></tr>
-<tr><td>Z Algorithm 位置偏移</td><td>忘記 separator 長度</td><td>位置是 `i - m - 1`</td></tr>
-<tr><td>Separator 出現在字串中</td><td>分隔符不唯一</td><td>選不會出現的分隔符或改用其他方式</td></tr>
-<tr><td>空 pattern 行為不明</td><td>規格未定義</td><td>先確認題目需求</td></tr>
-<tr><td>Pattern 比 Text 長</td><td>未處理邊界</td><td>應直接回傳空結果</td></tr>
-</table>
+#### 不知道外層迴圈的上限
+
+Pattern 從 `start` 放入 Text 時，必須滿足：
+
+```cpp
+start + patternLength <= textLength
+```
+
+#### Naive 漏掉重疊匹配
+
+找到後不要直接將起點增加 Pattern 長度。若要所有重疊答案，外層起點每次只加一。
+
+#### Prefix Function 看不懂
+
+先不要看線性版本。先做三件事：
+
+1. 列出每個 Prefix。
+2. 找該 Prefix 的所有 Proper Prefix 與 Proper Suffix。
+3. 記錄最長相同長度。
+
+這就是 `pi[i]`。
+
+#### KMP 漏掉重疊匹配
+
+找到一次後若將 `matched` 設為 0，可能漏掉重疊答案。應使用：
+
+```cpp
+matched = pi[matched - 1];
+```
+
+#### KMP 存取 Pattern 越界
+
+先處理空 Pattern。搜尋過程中，一旦 `matched == m`，完成記錄並立即回退，避免下一輪存取 `pattern[m]`。
+
+#### Rabin-Karp 偶爾誤判
+
+可能發生 Hash Collision。若需要完全正確，Hash 相同後逐字比較。
+
+#### Rolling Hash 出現負數
+
+移除舊字元後應正規化：
+
+```cpp
+(windowHash - removed + mod) % mod
+```
+
+#### Z Algorithm 回傳位置偏移
+
+對：
+
+```text
+pattern + separator + text
+```
+
+Text 的起始偏移是：
+
+```text
+pattern.size() + 1
+```
+
+因此原 Text 位置為：
+
+```cpp
+i - patternLength - 1
+```
+
+#### Separator 可能出現在輸入中
+
+必須選擇不會出現在 Pattern 與 Text 中的分隔方式；若輸入可包含任意 Byte，單一 `char` Separator 不一定安全，應改用其他組合方式或 KMP 搜尋流程。
+
+---
 
 ### 48.14 本章檢查表
 
-- 我已定義 pattern 為空時的行為。
-- 我知道是否允許重疊匹配。
-- 我會先用 Naive Matching 當作小型 Oracle。
-- 我能說明 Prefix、Suffix 與 Border。
-- 我能建立 Prefix Function。
-- 我知道 KMP 找到匹配後要回退以支援重疊。
-- 我知道 Rabin-Karp 有 Hash Collision 風險。
-- 我會在 Hash 相同後逐字驗證，若需要確定正確答案。
-- 我能建立 Z Array 並處理 separator。
-- 我能比較 KMP、Rabin-Karp、Z Algorithm 的適用情境。
+#### 第一輪：Naive
+
+- 我知道 Text 與 Pattern 各自代表什麼。
+- 我能列舉 Pattern 的所有可能起點。
+- 我知道為什麼條件是 `start + m <= n`。
+- 我能用內層迴圈逐字比較。
+- 我知道找到一個不同字元就可以停止目前起點。
+- 我知道 Naive 最差時間是 O(nm)。
+
+#### 第二輪：KMP
+
+- 我能區分 Prefix 與 Suffix。
+- 我知道 Proper 不包含完整字串本身。
+- 我能找出短字串的 Border。
+- 我知道 `pi[i]` 是 `pattern[0..i]` 的最長 Border 長度。
+- 我能手算 `"ababd"` 的 Prefix Function。
+- 我知道 KMP 的 `matched` 表示已匹配的 Pattern Prefix 長度。
+- 我知道失敗時使用 `pi` 回退，而不是讓 Text 回頭。
+- 我知道找到答案後仍需回退，以保留重疊匹配。
+
+#### 第三輪：延伸方法
+
+- 我知道 Hash 不同一定不匹配，但 Hash 相同可能 Collision。
+- 我知道要求完全正確時要做二次驗證。
+- 我知道 `z[i]` 表示位置 `i` 與整體 Prefix 的最長匹配長度。
+- 我知道第一次閱讀不需要同時熟練 KMP、Rabin-Karp 與 Z Algorithm。
+
+---
 
 ### 48.15 本章重點
 
-- String Matching 的基本問題是找出 pattern 在 text 中的出現位置。
-- Naive Matching 容易實作，但最差 O(nm)。
-- KMP 使用 Prefix Function，失敗時回退到最長 Border，避免重複比較。
-- Prefix Function `pi[i]` 表示 `pattern[0..i]` 的最長 proper border 長度。
-- KMP 可在 O(n + m) 時間找出所有匹配，並支援重疊匹配。
-- Rabin-Karp 使用 Rolling Hash，平均效率好，但需處理 Hash Collision。
-- Z Algorithm 計算每個位置與字串 Prefix 的最長共同前綴，也能做 O(n + m) Matching。
-- 空 pattern、重疊匹配、separator、Hash 負數與 Collision 是常見邊界問題。
+1. String Matching 的基本問題，是尋找 Pattern 在 Text 中的完整出現位置。
+2. 實作前先定義空 Pattern、重疊匹配、大小寫與文字單位。
+3. Naive Matching 列舉每個起點，再逐字比較；它簡單、正確，而且常已足夠。
+4. Naive 的最差時間為 O(nm)，瓶頸是失敗後重複比較已知內容。
+5. Border 是同時為 Proper Prefix 與 Proper Suffix 的內容。
+6. Prefix Function 記錄每個 Pattern Prefix 的最長 Border 長度。
+7. KMP 失敗時使用 Border 回退 Pattern 的匹配長度，Text 不需要回頭。
+8. 學 KMP 時先手算 `pi`，再追蹤 `matched`，不要一次要求自己完成全部程式。
+9. Rabin-Karp 使用 Rolling Hash，但 Hash Collision 必須納入正確性考量。
+10. Z Algorithm 記錄各位置與整體 Prefix 的最長匹配長度。
+11. 第一次閱讀先學會 Naive，再學 KMP；Rabin-Karp 與 Z Algorithm 可以稍後處理。
