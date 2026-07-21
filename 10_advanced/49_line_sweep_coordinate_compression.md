@@ -62,7 +62,6 @@
 - [49.14 本章檢查表](#4914-本章檢查表)
 - [49.15 本章重點](#4915-本章重點)
 
----
 
 ## 49.1 先從一個時間區間問題開始
 
@@ -127,7 +126,6 @@ Sweep Axis 可以是：
 
 核心不是畫一條線，而是將問題轉成「依某個值排序後，逐步更新狀態」。
 
----
 
 ## 49.2 Event 是什麼
 
@@ -195,7 +193,6 @@ std::sort(events.begin(), events.end());
 
 不過，同座標 Start 與 End 的先後可能影響答案。與其依賴 `+1`、`-1` 的排序順序，本章的基礎案例會將同座標 Delta 全部加總，再一次更新。
 
----
 
 ## 49.3 完整案例：最大重疊數量
 
@@ -358,7 +355,6 @@ Events：
 - 總時間：O(n log n)。
 - 額外空間：O(n)。
 
----
 
 ## 49.4 完整案例：Interval 聯集長度
 
@@ -520,7 +516,6 @@ active > 0，加入 5 - 4 = 1
 
 這會把目前座標才發生的變化，錯誤套用到前一段。
 
----
 
 ## 49.5 同座標 Event 與 Half-open Interval
 
@@ -586,7 +581,6 @@ End 一定先於 Start
 
 真正的順序取決於 Interval 與 Query 的語意。
 
----
 
 ## 49.6 Difference Event
 
@@ -632,7 +626,6 @@ Difference Array：為整個值域準備位置
 Event Sorting：只保存真的發生變化的位置
 ```
 
----
 
 ## 49.7 Coordinate Compression
 
@@ -803,7 +796,6 @@ const int index = count - 1;
 
 當 `count == 0` 時，`index == -1`，代表沒有符合座標。
 
----
 
 ## 49.8 點壓縮與區段壓縮
 
@@ -866,7 +858,6 @@ coordinates[2] - coordinates[1]
 
 Compression 保留排序，不保留實際距離。
 
----
 
 ## 49.9 延伸：搭配 Fenwick Tree
 
@@ -903,7 +894,6 @@ Compression 保留排序，不保留實際距離。
 
 > 相同 Sweep 座標的資料，是否應互相看見？
 
----
 
 ## 49.10 延伸：搭配 Segment Tree
 
@@ -937,7 +927,6 @@ coveredLength = 左子節點 + 右子節點
 
 重點是使用原始座標差，不是葉節點數量。
 
----
 
 ## 49.11 延伸：Rectangle Union Area
 
@@ -1003,7 +992,6 @@ coveredYLength × (currentX - previousX)
 - 沒有忽略零寬或零高 Rectangle。
 - 面積乘法使用太小的整數型別。
 
----
 
 ## 49.12 固定分析流程
 
@@ -1085,7 +1073,6 @@ coveredYLength × (currentX - previousX)
 - 負座標。
 - 極大座標。
 
----
 
 ## 49.13 常見問題與判讀
 
@@ -1151,7 +1138,6 @@ coveredYLength × xDifference
 - 找精確 Index：`lower_bound`，但要確認真的存在。
 - 找 `<= q` 的數量：`upper_bound`。
 
----
 
 ## 49.14 本章檢查表
 
@@ -1181,7 +1167,6 @@ coveredYLength × xDifference
 - 我知道 Rectangle Area 是 y 聯集長度乘上 x 差。
 - 我知道長度與面積必須使用原始座標差。
 
----
 
 ## 49.15 本章重點
 
