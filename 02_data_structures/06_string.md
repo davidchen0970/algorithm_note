@@ -1231,9 +1231,7 @@ int main()
 ```cpp
 #include <string>
 
-std::string longestCommonSubstring(
-    const std::string& first,
-    const std::string& second)
+std::string longestCommonSubstring(const std::string& first, const std::string& second)
 {
     std::size_t bestBegin = 0;
     std::size_t bestLength = 0;
