@@ -1,112 +1,163 @@
-### 第 49 章　Line Sweep 與 Coordinate Compression
+# 第 49 章　Line Sweep 與 Coordinate Compression
 
-#### 適用範圍
+## 適用範圍
 
-本章介紹 Line Sweep 與 Coordinate Compression，包括 Event 建模、排序規則、同座標事件處理、Interval Union Length、Maximum Overlap、Difference Event、離散座標映射，以及搭配 Fenwick Tree、Segment Tree 的綜合應用。
+本章假設讀者目前會：
 
-Line Sweep 的核心是把幾何或時間問題改寫成依座標排序的事件序列，再由左往右維護目前狀態。Coordinate Compression 則保留座標的順序與相等關係，把很大或稀疏的值域映射成緊密 Index。原始章節也提醒，真正需要先確認的是 Sweep Axis、Event 語意、Interval 邊界、同座標處理順序，以及 Compression 是否需要保留實際長度。citeturn41search1
+- `for` 與 `while` 迴圈。
+- `std::vector`。
+- `std::sort`。
+- `std::pair`。
+- Half-open Interval `[left, right)`。
 
-本版會在既有內容上補強：
+本章不假設讀者一開始就會 Fenwick Tree、Segment Tree 或 Rectangle Union Area。這些內容會放在後半部，並標示為延伸內容。
 
-- Line Sweep 的固定推導流程。
-- Event Grouping 與 Tie-breaking 的設計方式。
-- Maximum Overlap 與 Union Length 的完整 C++ 實作。
-- Coordinate Compression 的點壓縮與區段壓縮差異。
-- Fenwick Tree 與 Segment Tree 搭配 Sweep 的情境。
-- Rectangle Union Area 的實作觀念。
-- C 語言實作、Debug 表格與常見錯誤判讀。
+第一次閱讀的主要目標只有三個：
 
-```mermaid
-flowchart TD
-    A["定義 Sweep Axis"] --> B["建立 Event"]
-    B --> C["排序與同座標 Group"]
-    C --> D["維護 Active State"]
-    D --> E{"相鄰 Event 間是否有貢獻"}
-    E -->|是| F["用舊 State 計算上一段"]
-    E -->|否| G["直接處理事件"]
-    F --> H["套用目前 Event"]
-    G --> H
-    H --> I["更新 previous coordinate"]
-```
+1. 把每個 Interval 拆成開始與結束 Event。
+2. 排序 Event，從左向右更新目前狀態。
+3. 理解 Coordinate Compression 只保留順序，不保留實際距離。
 
-#### 適用讀者
+只要能獨立寫出「最大重疊數量」與「Interval 聯集長度」，第一輪就已經完成。
 
-- 面對大量 Interval Overlap，不確定該如何排序事件的讀者。
-- 容易在相同座標的 Start、End Event 上產生差一錯誤的讀者。
-- 想把巨大座標用 Fenwick Tree 或 Segment Tree 處理的讀者。
-- Compression 後誤把 Index 差當成實際長度的讀者。
-- 需要計算 Union Length、Maximum Overlap 或 Rectangle Area 的讀者。
-- 想理解 Line Sweep、Difference Array 與 Event Sorting 關係的讀者。
+## 閱讀方式
 
-#### 快速導覽
+### 第一輪必讀
 
-- [49.1 Line Sweep 到底做什麼](#491-line-sweep-到底做什麼)
-- [49.2 第一步：定義 Sweep Axis 與 Event](#492-第一步定義-sweep-axis-與-event)
-- [49.3 Interval 與同座標事件](#493-interval-與同座標事件)
-- [49.4 完整案例：最大重疊數量](#494-完整案例最大重疊數量)
-- [49.5 完整案例：Interval Union Length](#495-完整案例interval-union-length)
+- 49.1 先從一個時間區間問題開始。
+- 49.2 Event 是什麼。
+- 49.3 最大重疊數量。
+- 49.4 聯集長度。
+- 49.5 同座標 Event 與 Half-open Interval。
+
+### 第二輪必讀
+
+- 49.6 Difference Event。
+- 49.7 Coordinate Compression。
+- 49.8 點壓縮與區段壓縮。
+
+### 第三輪延伸
+
+- 49.9 搭配 Fenwick Tree。
+- 49.10 搭配 Segment Tree。
+- 49.11 Rectangle Union Area。
+
+如果尚未學過 Fenwick Tree 或 Segment Tree，可以先跳過第三輪。這不影響對 Line Sweep 與 Coordinate Compression 基礎的理解。
+
+## 快速導覽
+
+- [49.1 先從一個時間區間問題開始](#491-先從一個時間區間問題開始)
+- [49.2 Event 是什麼](#492-event-是什麼)
+- [49.3 完整案例：最大重疊數量](#493-完整案例最大重疊數量)
+- [49.4 完整案例：Interval 聯集長度](#494-完整案例interval-聯集長度)
+- [49.5 同座標 Event 與 Half-open Interval](#495-同座標-event-與-half-open-interval)
 - [49.6 Difference Event](#496-difference-event)
 - [49.7 Coordinate Compression](#497-coordinate-compression)
-- [49.8 完整案例：壓縮巨大座標](#498-完整案例壓縮巨大座標)
-- [49.9 點 Compression 與區段 Compression](#499-點-compression-與區段-compression)
-- [49.10 Line Sweep 搭配 Fenwick Tree](#4910-line-sweep-搭配-fenwick-tree)
-- [49.11 Line Sweep 搭配 Segment Tree](#4911-line-sweep-搭配-segment-tree)
-- [49.12 Rectangle Union Area](#4912-rectangle-union-area)
-- [49.13 常見題型](#4913-常見題型)
-- [49.14 正確性與複雜度](#4914-正確性與複雜度)
-- [49.15 C 語言中的實作](#4915-c-語言中的實作)
-- [49.16 系統化 Debug](#4916-系統化-debug)
-- [49.17 常見問題與判讀](#4917-常見問題與判讀)
-- [49.18 本章檢查表](#4918-本章檢查表)
-- [49.19 本章重點](#4919-本章重點)
+- [49.8 點壓縮與區段壓縮](#498-點壓縮與區段壓縮)
+- [49.9 延伸：搭配 Fenwick Tree](#499-延伸搭配-fenwick-tree)
+- [49.10 延伸：搭配 Segment Tree](#4910-延伸搭配-segment-tree)
+- [49.11 延伸：Rectangle Union Area](#4911-延伸rectangle-union-area)
+- [49.12 固定分析流程](#4912-固定分析流程)
+- [49.13 常見問題與判讀](#4913-常見問題與判讀)
+- [49.14 本章檢查表](#4914-本章檢查表)
+- [49.15 本章重點](#4915-本章重點)
 
-#### 49.1 Line Sweep 到底做什麼
+---
 
-Line Sweep 將問題中的關鍵變化點轉成 Event，再依座標排序。Sweep 由左往右經過 Event，維護目前有效的 Interval、物件或統計 State。原始章節也指出，在兩個相鄰 Event 座標之間，若沒有其他 Event，Active State 不會改變，因此不需要逐一處理巨大座標範圍中的每個位置。citeturn41search1
+## 49.1 先從一個時間區間問題開始
 
-```mermaid
-flowchart LR
-    A["Event x1"] --> B["Event x2"]
-    B --> C["Event x3"]
-    C --> D["Event x4"]
-    S["Sweep Line"] -. "由左向右" .-> D
-```
-
-常見 State：
-
-- Active Interval 數量。
-- 目前覆蓋長度。
-- 目前最高或最低值。
-- 另一個維度上的 Active Set。
-- Fenwick Tree 或 Segment Tree 中的統計摘要。
-
-##### Line Sweep 適合什麼問題
-
-<table>
-<tr><th>題目特徵</th><th>可考慮 Sweep 的原因</th></tr>
-<tr><td>Interval 開始與結束</td><td>只有端點會改變 Active State</td></tr>
-<tr><td>時間軸上的事件</td><td>依時間排序處理狀態改變</td></tr>
-<tr><td>二維矩形覆蓋</td><td>掃 x，維護 y 方向覆蓋</td></tr>
-<tr><td>離線 Query</td><td>將 Update 與 Query 依座標排序</td></tr>
-<tr><td>巨大稀疏座標</td><td>只處理出現過的座標或壓縮後 Index</td></tr>
-</table>
-
-#### 49.2 第一步：定義 Sweep Axis 與 Event
-
-一維 Interval `[left, right)` 可產生兩個 Event：
+假設有三場會議：
 
 ```text
-(left, +1)   區間開始
-(right, -1)  區間結束
+A：[1, 4)
+B：[2, 5)
+C：[4, 6)
 ```
 
-```mermaid
-flowchart LR
-    L["left<br/>+1"] --> A["Active Interval"]
-    A --> R["right<br/>-1"]
+`[1, 4)` 表示從時間 1 開始，到時間 4 結束，而且不包含時間 4。
+
+我們想知道：
+
+> 最多有幾場會議同時進行？
+
+### 最直覺的觀察
+
+會議數量只會在下列時間改變：
+
+```text
+1, 2, 4, 5, 6
 ```
 
-典型 Event 結構：
+在時間 2 到 4 之間，不會突然有新會議開始或結束，所以進行中的會議數量保持不變。
+
+因此不必處理每一個可能時間，只需處理「狀態發生變化的位置」。
+
+這些位置稱為 Event。
+
+### 從左向右走一次
+
+```text
+時間 1：A 開始，active = 1
+時間 2：B 開始，active = 2
+時間 4：A 結束，C 開始，active 仍是 2
+時間 5：B 結束，active = 1
+時間 6：C 結束，active = 0
+```
+
+最大值是 2。
+
+這就是最基本的 Line Sweep：
+
+```text
+建立 Event
+→ 依座標排序
+→ 從左向右處理
+→ 維護目前狀態
+```
+
+### Line Sweep 不一定是幾何線
+
+Sweep Axis 可以是：
+
+- x 座標。
+- y 座標。
+- 時間。
+- 排序後的位置。
+- 其他具有先後順序的 Key。
+
+核心不是畫一條線，而是將問題轉成「依某個值排序後，逐步更新狀態」。
+
+---
+
+## 49.2 Event 是什麼
+
+對 Half-open Interval：
+
+```text
+[left, right)
+```
+
+可以建立兩個 Event：
+
+```text
+(left,  +1)  開始
+(right, -1)  結束
+```
+
+例如：
+
+```text
+[2, 5)
+```
+
+變成：
+
+```text
+(2, +1)
+(5, -1)
+```
+
+### 最簡單的 Event 結構
 
 ```cpp
 struct Event
@@ -116,70 +167,97 @@ struct Event
 };
 ```
 
-複雜問題可能還需要：
+- `coordinate`：事件發生位置。
+- `delta`：目前 Active Count 要增加或減少多少。
 
-- Event Type。
-- 另一維區間。
-- Query ID。
-- Weight。
-- 原始 Index。
+也可以先使用：
 
-Event 欄位應足以更新 Sweep State，不能只保存座標而遺失事件語意。原始章節也有相同提醒。citeturn41search1
+```cpp
+std::pair<long long, int>
+```
 
-##### 定義 Event 的檢查表
-
-- Sweep Axis 是 x、y、時間，還是其他排序 Key？
-- Event 代表開始、結束、查詢、加入、移除，還是狀態改變？
-- Event 是否需要保存原始 Index 或 Query ID？
-- 同座標 Event 是否需要 Group？
-- Event 排序是否與題目語意一致？
-
-#### 49.3 Interval 與同座標事件
-
-本章主要使用 Half-open Interval `[left, right)`。
-
-相接區間：
+其中：
 
 ```text
-[1, 3) 和 [3, 5)
+first  = coordinate
+second = delta
 ```
 
-在座標 3 沒有共同覆蓋正長度。
+### 為什麼一定要排序
 
-若只求 Maximum Active Count，可將同座標所有 Delta 先合併，再更新 Active。這可避免 Start、End 的任意排序影響結果。原始章節也建議優先使用 Half-open Interval、對同座標同類更新先 Group，並文件化不同 Event Type 的排序順序。citeturn41search1
+輸入 Interval 可能沒有依時間排列。Line Sweep 必須按照 Event 發生順序處理，所以先排序座標。
 
-```mermaid
-flowchart TD
-    A["同座標 Events"] --> B["先加總 Delta"]
-    B --> C["一次更新 Active"]
-    C --> D["依定義更新答案"]
+```cpp
+std::sort(events.begin(), events.end());
 ```
 
-##### Half-open 與 Closed Interval
+對 `pair` 而言，會先比較 `first`，相同時再比較 `second`。
 
-<table>
-<tr><th>語意</th><th>相接端點是否重疊</th><th>例子</th></tr>
-<tr><td>`[left, right)`</td><td>否</td><td>`[1,3)` 與 `[3,5)` 不重疊</td></tr>
-<tr><td>`[left, right]`</td><td>是</td><td>`[1,3]` 與 `[3,5]` 在 3 重疊</td></tr>
-</table>
+不過，同座標 Start 與 End 的先後可能影響答案。與其依賴 `+1`、`-1` 的排序順序，本章的基礎案例會將同座標 Delta 全部加總，再一次更新。
 
-若題目是 Closed Interval，Start、Query、End 的 Tie-breaking 需依題目語意重新推導，不能直接套 Half-open 的事件順序。
+---
 
-##### 同座標事件的常見處理
+## 49.3 完整案例：最大重疊數量
 
-<table>
-<tr><th>需求</th><th>建議處理</th></tr>
-<tr><td>只算 Active Count</td><td>同座標 delta 加總後一次更新</td></tr>
-<tr><td>有 Query 且 Closed Interval</td><td>明確定義 Start、Query、End 順序</td></tr>
-<tr><td>同 x 的點不應互相影響</td><td>同 x 先全部 Query，再一起 Update</td></tr>
-<tr><td>Rectangle Area</td><td>先用上一段 x 差計算面積，再處理目前 x Event</td></tr>
-</table>
+### 問題
 
-#### 49.4 完整案例：最大重疊數量
+給定多個 Half-open Interval `[left, right)`，求任意位置同時被多少個 Interval 覆蓋的最大值。
 
-##### 問題規格
+零長度或反向 Interval：
 
-給定多個 Half-open Interval `[left, right)`，求任意位置同時被多少個 Interval 覆蓋的最大值。零長度 Interval 不產生覆蓋。
+```text
+left >= right
+```
+
+在本案例中忽略。
+
+### 第一步：建立 Events
+
+```cpp
+std::vector<std::pair<long long, int>> events;
+
+for (const auto& [left, right] : intervals)
+{
+    if (left >= right)
+    {
+        continue;
+    }
+
+    events.push_back({left, +1});
+    events.push_back({right, -1});
+}
+```
+
+### 第二步：排序
+
+```cpp
+std::sort(events.begin(), events.end());
+```
+
+### 第三步：同座標一起處理
+
+```cpp
+int active = 0;
+int answer = 0;
+
+for (std::size_t i = 0; i < events.size(); )
+{
+    const long long coordinate = events[i].first;
+    int delta = 0;
+
+    while (i < events.size() &&
+           events[i].first == coordinate)
+    {
+        delta += events[i].second;
+        ++i;
+    }
+
+    active += delta;
+    answer = std::max(answer, active);
+}
+```
+
+### 完整程式
 
 ```cpp
 #include <algorithm>
@@ -206,8 +284,9 @@ int maximumOverlap(
 
     int active = 0;
     int answer = 0;
+    std::size_t i = 0;
 
-    for (std::size_t i = 0; i < events.size(); )
+    while (i < events.size())
     {
         const long long coordinate = events[i].first;
         int delta = 0;
@@ -227,37 +306,113 @@ int maximumOverlap(
 }
 ```
 
-##### Sweep Invariant
+### 手動追蹤
 
-處理完座標 x 的所有 Event 後：
+輸入：
 
 ```text
-active 等於在 x 右側緊鄰區段上有效的 Interval 數量。
+[1, 4)
+[2, 5)
+[4, 6)
 ```
 
-```mermaid
-stateDiagram-v2
-    [*] --> X1
-    X1: 座標 1，active 增加
-    X1 --> X2: 掃過 1 到 2
-    X2: 座標 2，再增加
-    X2 --> X3: 掃過 2 到 3，重疊數較高
-    X3: 座標 3，結束與開始 Delta 合併
+Events：
+
+```text
+(1, +1)
+(2, +1)
+(4, -1)
+(4, +1)
+(5, -1)
+(6, -1)
 ```
 
-##### 複雜度
+依座標分組後：
 
-- 建立 Event：O(n)。
+```text
+座標 1：delta = +1，active = 1
+座標 2：delta = +1，active = 2
+座標 4：delta =  0，active = 2
+座標 5：delta = -1，active = 1
+座標 6：delta = -1，active = 0
+```
+
+答案是 2。
+
+### 為什麼座標 4 的 Delta 是 0
+
+在 `[left, right)` 語意下：
+
+- A 在 4 結束。
+- C 在 4 開始。
+
+它們沒有重疊正長度，但進行中的總數仍由 2 變成 2。因此合併後 Delta 為 0。
+
+### 複雜度
+
+若有 `n` 個 Interval：
+
+- 建立 `2n` 個 Event：O(n)。
 - 排序：O(n log n)。
 - Sweep：O(n)。
 - 總時間：O(n log n)。
 - 額外空間：O(n)。
 
-#### 49.5 完整案例：Interval Union Length
+---
 
-##### 問題規格
+## 49.4 完整案例：Interval 聯集長度
 
-求多個 Half-open Interval 聯集的總長度。
+### 問題
+
+計算所有 Interval 合併後，總共覆蓋多長。
+
+例如：
+
+```text
+[1, 4)
+[2, 5)
+```
+
+雖然兩個區間長度都是 3，但重疊部分不能重複計算。聯集是：
+
+```text
+[1, 5)
+```
+
+答案是 4。
+
+### 最大重疊與聯集長度的差異
+
+最大重疊只在 Event 位置更新 `active`。
+
+聯集長度還要計算相鄰 Event 之間的距離：
+
+```text
+currentCoordinate - previousCoordinate
+```
+
+如果上一段的 `active > 0`，該段就被至少一個 Interval 覆蓋。
+
+### 最重要的更新順序
+
+到達 `coordinate` 時，區段：
+
+```text
+[previous, coordinate)
+```
+
+仍然由「目前 Event 尚未套用前」的舊 `active` 決定。
+
+因此順序一定是：
+
+```text
+1. 使用舊 active 計算上一段
+2. 合併目前座標的 delta
+3. 更新 active
+4. previous = coordinate
+```
+
+### 完整程式
 
 ```cpp
 #include <algorithm>
@@ -280,10 +435,15 @@ long long intervalUnionLength(
         events.push_back({right, -1});
     }
 
+    if (events.empty())
+    {
+        return 0;
+    }
+
     std::sort(events.begin(), events.end());
 
     long long answer = 0;
-    long long previous = 0;
+    long long previous = events[0].first;
     int active = 0;
     std::size_t i = 0;
 
@@ -313,68 +473,247 @@ long long intervalUnionLength(
 }
 ```
 
-##### 更新順序
+### 手動追蹤
 
-到達目前 coordinate 時，`[previous, coordinate)` 的覆蓋狀態仍由舊 `active` 決定。因此：
-
-1. 先累加上一段長度。
-2. 再處理目前座標 Event。
-3. 更新 `previous`。
-
-```mermaid
-flowchart LR
-    P["previous"] --> C["current coordinate"]
-    A["舊 Active State"] --> L["決定 P 到 C 是否計入長度"]
-    L --> E["再套用 current Events"]
-```
-
-若先更新 Active 再計算上一段，會把目前座標的變化錯誤套用到前一段。原始章節也明確指出 Union Length 需要先用舊 Active State 計算上一段，再套用目前事件。citeturn41search1
-
-#### 49.6 Difference Event
-
-Line Sweep 的一維 Count Event 和 Difference Array 具有相同精神：
+輸入：
 
 ```text
-left 位置 +delta
-right 位置 -delta
+[1, 4)
+[2, 5)
 ```
 
-若座標範圍小且連續，可直接用 Difference Array；若座標很大或稀疏，可排序 Event 或先 Coordinate Compression。原始章節也用同樣流程區分 Difference Array 與 Event Sorting / Compression。citeturn41search1
+```text
+到座標 1：
+上一段長度 0
+套用 +1，active = 1
+previous = 1
 
-```mermaid
-flowchart TD
-    A["區間更新"] --> B{"座標值域小且密集嗎"}
-    B -->|是| C["Difference Array"]
-    B -->|否| D["Event Sorting / Compression"]
+到座標 2：
+active > 0，加入 2 - 1 = 1
+套用 +1，active = 2
+previous = 2
+
+到座標 4：
+active > 0，加入 4 - 2 = 2
+套用 -1，active = 1
+previous = 4
+
+到座標 5：
+active > 0，加入 5 - 4 = 1
+套用 -1，active = 0
 ```
 
-##### Difference Array 適合
+總長度：
+
+```text
+1 + 2 + 1 = 4
+```
+
+### 常見錯誤
+
+錯誤順序：
+
+```text
+先更新 active
+再計算 [previous, coordinate)
+```
+
+這會把目前座標才發生的變化，錯誤套用到前一段。
+
+---
+
+## 49.5 同座標 Event 與 Half-open Interval
+
+### 為什麼本章使用 `[left, right)`
+
+對相接區間：
+
+```text
+[1, 3)
+[3, 5)
+```
+
+第一個在 3 結束，第二個在 3 開始，兩者沒有共同覆蓋正長度。
+
+這與 C++ 常見的 `[begin, end)` 區間模型一致，也讓長度直接等於：
+
+```text
+right - left
+```
+
+### 同座標 Event 為什麼要 Group
+
+如果同一座標同時有多個 Start 和 End，單純依 Event Type 排序，答案可能依題目語意而改變。
+
+對只需要區段右側狀態的 Half-open Interval Count，可以把所有 Delta 先加總：
+
+```cpp
+int delta = 0;
+
+while (i < events.size() &&
+       events[i].first == coordinate)
+{
+    delta += events[i].second;
+    ++i;
+}
+
+active += delta;
+```
+
+這能避免依賴 Start 與 End 的任意排序。
+
+### Closed Interval 不能直接照抄
+
+若題目使用：
+
+```text
+[left, right]
+```
+
+端點 `right` 仍被包含。此時相同座標的 Start、End、Query 先後順序，必須依題目對「端點是否同時存在」的定義重新推導。
+
+不要只背：
+
+```text
+Start 一定先於 End
+```
+
+或：
+
+```text
+End 一定先於 Start
+```
+
+真正的順序取決於 Interval 與 Query 的語意。
+
+---
+
+## 49.6 Difference Event
+
+Line Sweep 的 `+1`、`-1` 與 Difference Array 使用相同想法。
+
+對：
+
+```text
+[left, right)
+```
+
+做：
+
+```text
+left 位置 +1
+right 位置 -1
+```
+
+之後依序累加，就得到每個位置的 Active Count。
+
+### 何時使用 Difference Array
+
+適合：
 
 - 座標是 `0..n-1`。
-- n 不大。
-- 多次 Range Add。
-- 最後才需要還原全部值。
+- `n` 不大。
+- 座標密集。
+- 最後需要知道每個位置的數值。
 
-##### Event Sorting 適合
+### 何時使用排序 Event
 
-- 座標巨大。
-- 座標只出現少量端點。
-- 只需要處理變化點。
-- 可離線排序 Event。
+適合：
 
-#### 49.7 Coordinate Compression
+- 座標可能到 `10^9` 或更大。
+- 只有少數端點真的出現。
+- 只需處理狀態變化位置。
+- 所有 Event 可以離線排序。
 
-Coordinate Compression 保留原始值的：
+### 直覺比較
+
+```text
+Difference Array：為整個值域準備位置
+Event Sorting：只保存真的發生變化的位置
+```
+
+---
+
+## 49.7 Coordinate Compression
+
+### 它要解決什麼問題
+
+假設座標是：
+
+```text
+100
+5000
+1000000
+```
+
+若想用 Array 依座標存資料，直接開到 1,000,001 格可能很浪費。
+
+但實際上只有三個座標重要，所以可以映射成：
+
+```text
+100      -> 0
+5000     -> 1
+1000000  -> 2
+```
+
+這就是 Coordinate Compression。
+
+### 壓縮保留什麼
+
+保留：
 
 - 相等關係。
-- 小於與大於順序。
+- 小於與大於的順序。
+- 排名。
 
-流程：
+不保留：
 
-1. 收集所有需要的座標。
-2. 排序。
-3. 去除重複。
-4. 以 Lower Bound 找壓縮 Index。
+- 實際距離。
+
+例如：
+
+```text
+5000 與 1000000 的壓縮 Index 只差 1
+```
+
+但實際距離是：
+
+```text
+1000000 - 5000 = 995000
+```
+
+### 三個步驟
+
+#### 第一步：收集
+
+```cpp
+std::vector<long long> coordinates;
+```
+
+加入所有後續需要映射的座標。
+
+#### 第二步：排序與去重
+
+```cpp
+std::sort(coordinates.begin(), coordinates.end());
+
+coordinates.erase(
+    std::unique(coordinates.begin(), coordinates.end()),
+    coordinates.end());
+```
+
+#### 第三步：找 Index
+
+```cpp
+const int index = static_cast<int>(
+    std::lower_bound(
+        coordinates.begin(),
+        coordinates.end(),
+        value)
+    - coordinates.begin());
+```
+
+### 完整輔助函式
 
 ```cpp
 #include <algorithm>
@@ -384,8 +723,11 @@ std::vector<long long> compressCoordinates(
     std::vector<long long> coordinates)
 {
     std::sort(coordinates.begin(), coordinates.end());
+
     coordinates.erase(
-        std::unique(coordinates.begin(), coordinates.end()),
+        std::unique(
+            coordinates.begin(),
+            coordinates.end()),
         coordinates.end());
 
     return coordinates;
@@ -404,349 +746,452 @@ int compressedIndex(
 }
 ```
 
-```mermaid
-flowchart LR
-    A["原座標<br/>100, 5000, 1000000"] --> B["排序去重"]
-    B --> C["Index<br/>0, 1, 2"]
-```
+### 手動範例
 
-Compression 不代表原始距離相同。5000 與 1000000 在壓縮後只差 1 個 Index，但實際長度差為 995000。原始章節也特別提醒，Compression 保留順序，不保留距離。citeturn41search1
-
-#### 49.8 完整案例：壓縮巨大座標
-
-假設需對巨大座標上的點做 Count Update 與 Prefix Query：
+原始資料：
 
 ```text
-Update coordinate x
-Query 有多少 Update coordinate <= q
+5000, 100, 5000, 1000000
 ```
 
-先收集所有 Update 與 Query 相關座標，Compression 後使用 Fenwick Tree。原始章節也提醒，若 Query Coordinate 不一定在 Compression Array 中，可使用 `upper_bound` 找不大於 q 的座標數量，而不是要求 q 必須正好存在。citeturn41search1
+排序：
 
-```mermaid
-flowchart TD
-    A["收集 Update / Query 座標"] --> B["排序去重"]
-    B --> C["轉成 0-based Index"]
-    C --> D["Fenwick Update / Prefix Query"]
+```text
+100, 5000, 5000, 1000000
 ```
 
-##### Query 不在壓縮座標中
+去重：
 
-若要回答 `<= q` 的數量：
+```text
+100, 5000, 1000000
+```
+
+映射：
+
+```text
+100      -> 0
+5000     -> 1
+1000000  -> 2
+```
+
+### Query 值不一定存在
+
+如果要問：
+
+```text
+有多少已收集座標 <= q
+```
+
+可以使用：
 
 ```cpp
-int countLessOrEqualIndex(
-    const std::vector<long long>& coordinates,
-    long long q)
-{
-    return static_cast<int>(
-        std::upper_bound(
-            coordinates.begin(),
-            coordinates.end(),
-            q)
-        - coordinates.begin()) - 1;
-}
+const int count = static_cast<int>(
+    std::upper_bound(
+        coordinates.begin(),
+        coordinates.end(),
+        q)
+    - coordinates.begin());
 ```
 
-如果回傳 -1，表示沒有任何壓縮座標 `<= q`。
+`count` 本身就是不大於 `q` 的座標數量。
 
-##### 離線收集注意
+若需要最後一個 `<= q` 的 0-based Index：
 
-若所有 Query 已知，最簡單是把 Update 與 Query 需要的座標都先收集。若 Query 是線上輸入且不可預先得知，就不一定能做完整 Compression，可能要改用 Ordered Map、Dynamic Segment Tree 或其他結構。
+```cpp
+const int index = count - 1;
+```
 
-#### 49.9 點 Compression 與區段 Compression
+當 `count == 0` 時，`index == -1`，代表沒有符合座標。
 
-##### 點 Compression
+---
 
-只關心座標點的相對順序，例如：
+## 49.8 點壓縮與區段壓縮
 
-- Rank。
-- Count。
+這是 Coordinate Compression 最容易混淆的地方。
+
+### 點壓縮
+
+只關心座標點的順序或排名：
+
+- 某個值是第幾小。
+- Point Update。
+- Prefix Count。
 - Inversion Count。
-- Point Update / Prefix Query。
 
-這時壓縮後 Index 可代表一個點。
+此時壓縮 Index 代表一個點。
 
-##### 區段 Compression
+### 區段壓縮
 
-若要計算 Length、Area 或覆蓋區段，需要保留相鄰原始座標差：
+若要計算長度或面積，真正重要的是相鄰座標形成的區段。
 
-```text
-segment i 代表 [coordinate[i], coordinate[i + 1])
-length = coordinate[i + 1] - coordinate[i]
-```
-
-```mermaid
-flowchart LR
-    X0["x0"] -->|"實際長度 x1-x0"| X1["x1"]
-    X1 -->|"實際長度 x2-x1"| X2["x2"]
-```
-
-Segment Tree Leaf 可以代表壓縮後的一段，而不是單一座標點。若有 m 個唯一坐標，區段數通常為 m - 1。原始章節也強調，點數與區段數不可混淆。citeturn41search1
-
-#### 49.10 Line Sweep 搭配 Fenwick Tree
-
-典型二維 Point 題：依 x 排序 Sweep，Fenwick Tree 維護已處理點的 y Frequency。
-
-例如計算每個點左下方點數：
-
-1. 依 x 排序。
-2. Compression 所有 y。
-3. Query y 以下 Prefix Count。
-4. 將目前點的 y 加入 Fenwick Tree。
-
-```mermaid
-flowchart LR
-    A["按 x 排序的點"] --> B["Sweep 目前 x"]
-    B --> C["Fenwick Query y Prefix"]
-    C --> D["Fenwick Update 目前 y"]
-```
-
-相同 x 的點若不應互相計入，需先對整組同 x 點完成 Query，再一起 Update。這是 Tie-breaking 的另一種形式。原始章節也有相同提醒。citeturn41search1
-
-##### 同 x Group 模式
+若唯一座標為：
 
 ```text
-for each group with same x:
-    first answer all queries using current Fenwick
-    then update all points in this group
+coordinates = [100, 5000, 1000000]
 ```
 
-這樣可避免同 x 的點互相影響。
+區段是：
 
-#### 49.11 Line Sweep 搭配 Segment Tree
+```text
+Index 0 代表 [100, 5000)
+長度 = 5000 - 100
 
-若 Sweep 過程要維護另一維的：
+Index 1 代表 [5000, 1000000)
+長度 = 1000000 - 5000
+```
 
-- 覆蓋長度。
+三個座標只形成兩個相鄰區段。
+
+一般而言：
+
+```text
+m 個唯一座標
+→ m - 1 個相鄰區段
+```
+
+### 不能使用 Index 差計算長度
+
+錯誤：
+
+```text
+Index 2 - Index 1 = 1
+所以長度是 1
+```
+
+正確：
+
+```text
+coordinates[2] - coordinates[1]
+```
+
+Compression 保留排序，不保留實際距離。
+
+---
+
+## 49.9 延伸：搭配 Fenwick Tree
+
+> 若尚未學過 Fenwick Tree，可以先跳過本節。
+
+典型二維問題會：
+
+1. 依 x 排序並 Sweep。
+2. 將 y 做 Coordinate Compression。
+3. 用 Fenwick Tree 維護已經遇到的 y 次數。
+
+例如，計算每個點左下方有多少點：
+
+```text
+依 x 由小到大處理
+查詢 y 以下已有多少點
+再把目前 y 加入 Fenwick Tree
+```
+
+### 相同 x 的點
+
+若題目要求「嚴格在左側」，相同 x 的點不能互相計入。
+
+應依 x Group：
+
+```text
+對同 x 的所有點先 Query
+完成後再一起 Update
+```
+
+如果邊查邊更新，同一組中較早處理的點會錯誤影響後面的點。
+
+這和同座標 Event Grouping 是同一類問題：
+
+> 相同 Sweep 座標的資料，是否應互相看見？
+
+---
+
+## 49.10 延伸：搭配 Segment Tree
+
+> 若尚未學過 Segment Tree 與 Lazy Propagation，可以先跳過。
+
+Sweep 一個維度時，另一個維度可能需要維護：
+
+- Range Add。
 - Maximum Count。
-- Range Add 與全域摘要。
+- Covered Length。
 
-可將另一維座標壓縮後交給 Lazy Segment Tree。
+例如 Rectangle Union Area：
 
-```mermaid
-flowchart TD
-    X["x Event"] --> Y["對 y Interval 做 Range Add"]
-    Y --> S["Segment Tree Root 保存 y 覆蓋長度"]
-    S --> A["乘上下一段 x 差得到面積貢獻"]
+- x 方向使用 Line Sweep。
+- y 方向壓縮後交給 Segment Tree。
+
+### Covered Length 的節點概念
+
+若某個 y 區段的 `coverCount > 0`：
+
+```text
+整段都被覆蓋
+coveredLength = 原始右座標 - 原始左座標
 ```
 
-Node State 必須知道區段實際座標長度，而不是只知道壓縮 Index 數量。原始章節也特別指出，Rectangle Area 或覆蓋長度需要使用原始座標差。citeturn41search1
+若 `coverCount == 0`：
 
-##### Segment Tree 常見 State
+```text
+coveredLength = 左子節點 + 右子節點
+```
 
-<table>
-<tr><th>欄位</th><th>語意</th></tr>
-<tr><td>coverCount</td><td>目前這段被完整覆蓋的次數</td></tr>
-<tr><td>coveredLength</td><td>目前這段實際被覆蓋的 y 長度</td></tr>
-<tr><td>left, right</td><td>壓縮區段範圍</td></tr>
-</table>
+重點是使用原始座標差，不是葉節點數量。
 
-若 `coverCount > 0`，整段覆蓋長度是原始座標差。若 `coverCount == 0`，覆蓋長度由子節點合併。
+---
 
-#### 49.12 Rectangle Union Area
+## 49.11 延伸：Rectangle Union Area
 
-每個 Rectangle `[x1, x2) × [y1, y2)` 產生兩個 x Event：
+> 這是本章綜合題。第一次閱讀只需理解流程，不要求立即寫出完整 Segment Tree。
+
+每個 Rectangle：
+
+```text
+[x1, x2) × [y1, y2)
+```
+
+建立兩個 x Events：
 
 ```text
 (x1, y1, y2, +1)
 (x2, y1, y2, -1)
 ```
 
-Sweep x，Segment Tree 維護目前 y 聯集長度：
+Sweep x 時，Segment Tree 維護目前 y 方向的聯集長度：
 
 ```text
-area += coveredYLength * (currentX - previousX)
+coveredYLength
 ```
 
-```mermaid
-flowchart LR
-    X1["x1 Start"] --> X2["x2 End"]
-    Y["y1 到 y2 Range Add"] --> C["目前 covered Y Length"]
-    C --> A["乘上 x 差"]
+相鄰 x Event 間的面積是：
+
+```text
+coveredYLength × (currentX - previousX)
 ```
 
-為避免 Overflow，Area 通常使用 64-bit，且乘法前就應轉成足夠寬型別。原始章節也有相同提醒。citeturn41search1
+### 固定流程
 
-##### Rectangle Area 的固定順序
+1. 將 Rectangle 轉成 x Events。
+2. 收集所有 `y1`、`y2`。
+3. 對 y 做區段壓縮。
+4. 依 x 排序 Event。
+5. 先用舊 `coveredYLength` 計算上一條 x 區段面積。
+6. 再套用目前 x 的全部 y Range Updates。
+7. 更新 `previousX`。
 
-1. 將所有 Rectangle 轉成 x Event。
-2. 收集所有 y1、y2，做區段 Compression。
-3. 依 x 排序 Event。
-4. 到達 currentX 時，先用舊的 coveredYLength 乘上 x 差。
-5. 再套用 currentX 的所有 y Range Add。
-6. 更新 previousX。
+### 與 Interval Union Length 的關係
 
-##### 常見錯誤
+一維聯集長度：
 
-- 用 y Index 數量當作 y 長度。
-- m 個 y 座標建成 m 個葉節點，而非 m - 1 個區段。
-- 先更新 x Event 再算上一段面積。
+```text
+若 active > 0
+加入 current - previous
+```
+
+二維 Rectangle Area：
+
+```text
+加入 coveredYLength × (currentX - previousX)
+```
+
+核心更新順序完全相同：都先用舊狀態計算上一段，再套用目前 Events。
+
+### 常見錯誤
+
+- 使用 y Index 差而非原始 y 座標差。
+- `m` 個 y 座標建立 `m` 個區段，正確通常是 `m - 1`。
+- 先更新目前 x Event，再計算上一段面積。
 - 沒有忽略零寬或零高 Rectangle。
+- 面積乘法使用太小的整數型別。
 
-#### 49.13 常見題型
+---
 
-原始章節列出常見題型，包括 Meeting Room Maximum Overlap、Interval Union Length、Calendar Event Count、Skyline、Rectangle Union Area、Inversion Count、二維 Dominance Count、Offline Range Query、最近點或交叉事件的幾何 Sweep。citeturn41search1
+## 49.12 固定分析流程
 
-<table>
-<tr><th>題型</th><th>常見 State / 工具</th></tr>
-<tr><td>Meeting Room Maximum Overlap</td><td>Event + active count</td></tr>
-<tr><td>Interval Union Length</td><td>Event + active count + previous coordinate</td></tr>
-<tr><td>Calendar Event Count</td><td>Difference Event / Ordered Map</td></tr>
-<tr><td>Skyline</td><td>Sweep + Multiset / Heap</td></tr>
-<tr><td>Rectangle Union Area</td><td>x Sweep + y Segment Tree</td></tr>
-<tr><td>Inversion Count</td><td>Coordinate Compression + Fenwick Tree</td></tr>
-<tr><td>二維 Dominance Count</td><td>x Sweep + y Fenwick Tree</td></tr>
-<tr><td>Offline Range Query</td><td>排序 Query + Fenwick / Segment Tree</td></tr>
-</table>
+### 第一步：選 Sweep Axis
 
-不同題型的 Active Set、Tie-breaking 與第二維資料結構不同，不能只記住 Start +1、End -1。原始章節也有相同提醒。citeturn41search1
-
-#### 49.14 正確性與複雜度
-
-##### Sweep Invariant
-
-處理完所有座標小於 x 的 Event 後，資料結構正確表示 Sweep Line 位於下一事件前的 Active State。
-
-##### 為何只需 Event 座標
-
-相鄰 Event 之間沒有狀態變化，整段貢獻可一次計算。
-
-##### 常見複雜度
-
-- 建立 2n 個 Event：O(n)。
-- Event Sorting：O(n log n)。
-- 線性 Sweep：O(n)。
-- 每個 Event 搭配 Fenwick / Segment Tree：O(log n)。
-- 總時間常為 O(n log n)。
-- Compression 空間 O(n)。
-
-二維 Rectangle Union Area 仍常為 O(n log n)，但 State 與實作常數較大。原始章節也列出相同複雜度方向。citeturn41search1
-
-#### 49.15 C 語言中的實作
-
-C 可用 `qsort` 排序 Event。
-
-```c
-struct Event
-{
-    long long coordinate;
-    int delta;
-};
-
-int compare_event(const void* left, const void* right)
-{
-    const struct Event* a = (const struct Event*)left;
-    const struct Event* b = (const struct Event*)right;
-
-    if (a->coordinate < b->coordinate)
-    {
-        return -1;
-    }
-
-    if (a->coordinate > b->coordinate)
-    {
-        return 1;
-    }
-
-    return 0;
-}
-```
-
-Comparator 不應使用：
-
-```c
-return (int)(a->coordinate - b->coordinate);
-```
-
-因為差值可能 Overflow 或截斷。原始章節也明確提醒 C comparator 不應用差值回傳 int。citeturn41search1
-
-Compression 在 C 中需要自行配置座標 Array、排序、去重，並處理 Size 計算與配置失敗。
-
-#### 49.16 系統化 Debug
-
-逐輪記錄：
+問：
 
 ```text
-Event Coordinate
-Event Type / Delta
-同座標 Group
-previous Coordinate
-State 更新前
-上一段貢獻
-State 更新後
-Compression Index
-原始座標差
+按照哪個值排序後，狀態只會向前變化？
 ```
 
-```mermaid
-flowchart TD
-    A["答案錯誤"] --> B["先確認 Interval 邊界"]
-    B --> C["檢查同座標 Event Group"]
-    C --> D{"上一段貢獻是否用舊 State"}
-    D -->|否| E["調整更新順序"]
-    D -->|是| F{"長度使用原座標差嗎"}
-    F -->|否| G["修正 Compression Length"]
-    F -->|是| H["檢查第二維資料結構"]
+可能是 x、y、時間或其他 Key。
+
+### 第二步：定義 Interval 語意
+
+- `[left, right)`？
+- `[left, right]`？
+- 端點相接是否算重疊？
+- 零長度 Interval 是否有效？
+
+### 第三步：建立 Event
+
+每個 Event 必須保留足夠資訊來更新狀態：
+
+- 座標。
+- `delta`。
+- Event Type。
+- 另一維範圍。
+- Query ID。
+
+基礎 Count 問題只需要 `(coordinate, delta)`。
+
+### 第四步：決定同座標語意
+
+- 同座標 Delta 是否可以直接加總？
+- Query 應在 Update 前還是後？
+- 相同 x 的點是否互相計入？
+
+若可以，優先 Group 後一次處理，通常比依賴細微 Tie-breaking 更清楚。
+
+### 第五步：定義 State
+
+例如：
+
+- `active`。
+- `coveredLength`。
+- Active Set。
+- Fenwick Tree。
+- Segment Tree。
+
+### 第六步：確認上一段由哪個 State 決定
+
+對長度與面積問題：
+
+```text
+[previous, current)
 ```
 
-重要測試：
+通常由處理目前 Event 之前的舊 State 決定。
 
-- 空 Interval 集合。
+### 第七步：決定是否需要 Compression
+
+- 座標小而密集：Array 或 Difference Array。
+- 座標大而稀疏：Event Sorting 或 Compression。
+- 只需排名或 Count：點壓縮。
+- 需要長度或面積：區段壓縮並保留原始差值。
+
+### 第八步：建立最小測試
+
+至少測試：
+
+- 空集合。
 - 單一 Interval。
 - 零長度 Interval。
-- 完全重疊。
 - 完全不重疊。
+- 完全重疊。
 - 只在端點相接。
 - 多個 Event 同座標。
 - 負座標。
-- 極大座標與極大面積。
-- 重複點與重複 Rectangle。
+- 極大座標。
 
-原始章節也列出了相同的 Debug 記錄欄位與重要測試。citeturn41search1
+---
 
-#### 49.17 常見問題與判讀
+## 49.13 常見問題與判讀
 
-<table>
-<tr><th>現象</th><th>可能原因</th><th>第一輪檢查</th></tr>
-<tr><td>相接 Interval 被算成重疊</td><td>Closed 與 Half-open 混用</td><td>統一 `[left, right)`</td></tr>
-<tr><td>Union Length 差一段</td><td>先更新 Event 才算上一段</td><td>先用舊 Active 算距離</td></tr>
-<tr><td>同座標結果不穩定</td><td>Tie-breaking 未定義</td><td>Group Event 或明確排序</td></tr>
-<tr><td>Compression 後長度錯誤</td><td>使用 Index 差</td><td>使用原座標差</td></tr>
-<tr><td>相同 x 的點互相計入</td><td>Query 後立即逐點 Update</td><td>同 x 先全部 Query 再 Update</td></tr>
-<tr><td>Rectangle Area Overflow</td><td>乘法使用窄型別</td><td>使用 64-bit 並先轉型</td></tr>
-<tr><td>Segment Tree Leaf 數錯誤</td><td>Point 數與 Segment 數混淆</td><td>m 個點形成 m - 1 段</td></tr>
-<tr><td>Comparator 排序錯誤</td><td>用差值回傳 int</td><td>使用明確小於、大於比較</td></tr>
-<tr><td>重複座標 Mapping 不一致</td><td>未排序去重</td><td>建立唯一坐標陣列</td></tr>
-</table>
+### 最大重疊在相接端點多算一個
 
-這些現象也出現在原始章節的常見問題表中，尤其是 Half-open / Closed 混用、Union Length 更新順序、Compression 使用原座標差、同 x Group、Rectangle Area Overflow 與 Segment 數混淆。citeturn41search1
+可能混用了 Closed 與 Half-open Interval，或依賴錯誤的 Start / End 排序。
 
-#### 49.18 本章檢查表
+先確認：
 
-- 我能定義 Sweep Axis 與每種 Event。
-- 我一致使用 Half-open 或明確的 Closed Interval。
-- 我能說明同座標 Event 的處理順序。
-- 我知道上一段貢獻由更新前 State 決定。
-- 我能使用 Event 計算 Maximum Overlap 與 Union Length。
-- 我能完成排序、去重與 Lower Bound Compression。
-- 我知道 Compression 保留順序，不保留距離。
-- 我會使用原始座標差計算 Length 與 Area。
-- 我能區分點 Compression 與區段 Compression。
-- 我知道同 x Group 何時需要延後 Update。
-- 我能將 Fenwick Tree 或 Segment Tree 加入 Sweep。
-- 我會檢查 Comparator、Overflow、零長度與重複 Event。
+```text
+[1, 3) 與 [3, 5)
+```
 
-原始章節也包含這些檢查項目，特別是 Sweep Axis、Event、Half-open / Closed、同座標事件、上一段貢獻、Compression 與原始座標差。citeturn41search1
+在 3 是否應算同時覆蓋。
 
-#### 49.19 本章重點
+### Union Length 少算或多算一段
 
-- Line Sweep 將問題轉成依座標排序的 Event，並在相鄰 Event 之間維護不變 State。
-- Event 與 Tie-breaking 必須由 Interval 和 Query 語意推導。
-- Half-open Interval 能自然處理相接端點與零長度區間。
-- Union Length 必須先用舊 Active State 計算上一段，再套用目前 Event。
-- Coordinate Compression 保留相等與順序關係，但不保留實際距離。
-- 計算 Length 或 Area 時要使用原始座標差。
-- 點 Count 常搭配 Fenwick Tree，Range Cover 常搭配 Lazy Segment Tree。
-- 相同 Sweep Coordinate 的 Query、Update 常需要 Group 處理。
-- Event Sorting、Compression 與 Tree Update 的組合通常形成 O(n log n) 解法。
+檢查是否依照：
+
+```text
+先用舊 active 計算 [previous, current)
+再更新 active
+```
+
+### 同座標答案受排序方式影響
+
+若事件可以合併，先將同座標 Delta 加總。若不能合併，必須明確寫出 Query、Start、End 的語意順序。
+
+### Compression 後長度變成 1
+
+可能將壓縮 Index 差當成實際距離。
+
+應使用：
+
+```cpp
+coordinates[right] - coordinates[left]
+```
+
+### 有 m 個座標卻建立錯誤區段數
+
+相鄰區段通常只有：
+
+```text
+m - 1
+```
+
+### Fenwick Tree 同 x 的點互相計入
+
+如果要求嚴格較小 x，需先 Query 整組，再 Update 整組。
+
+### Rectangle Area Overflow
+
+檢查：
+
+```text
+coveredYLength × xDifference
+```
+
+乘法前就必須使用足夠寬的型別。
+
+### Query 座標不在壓縮陣列中
+
+- 找精確 Index：`lower_bound`，但要確認真的存在。
+- 找 `<= q` 的數量：`upper_bound`。
+
+---
+
+## 49.14 本章檢查表
+
+### 第一輪：Line Sweep 基礎
+
+- 我知道 Event 是狀態改變的位置。
+- 我能將 `[left, right)` 轉成 `(left, +1)` 與 `(right, -1)`。
+- 我知道為什麼要先排序 Event。
+- 我能將同座標 Delta 分組加總。
+- 我能寫出 Maximum Overlap。
+- 我知道 Union Length 必須先算上一段，再更新目前 Event。
+
+### 第二輪：Compression
+
+- 我知道 Compression 保留順序與相等關係。
+- 我知道 Compression 不保留實際距離。
+- 我能排序、去重並使用 `lower_bound` 找 Index。
+- 我知道 `upper_bound` 可以計算 `<= q` 的座標數量。
+- 我能區分點壓縮與區段壓縮。
+- 我知道 `m` 個唯一座標通常形成 `m - 1` 個相鄰區段。
+
+### 第三輪：延伸結構
+
+- 我知道相同 x 的 Query 與 Update 可能需要分組。
+- 我知道 Fenwick Tree 常維護點次數或 Prefix Count。
+- 我知道 Segment Tree 可維護 Range Cover 與 Covered Length。
+- 我知道 Rectangle Area 是 y 聯集長度乘上 x 差。
+- 我知道長度與面積必須使用原始座標差。
+
+---
+
+## 49.15 本章重點
+
+1. Line Sweep 只處理狀態發生變化的 Event，不必逐一走過巨大值域。
+2. 一個 Half-open Interval `[left, right)` 可轉成開始 `+1` 與結束 `-1` Event。
+3. 同座標 Event 優先考慮 Group，以明確表達該座標處理後的狀態。
+4. Maximum Overlap 只維護 `active` 與最大值。
+5. Union Length 還要計算相鄰 Event 間距離，且上一段由舊 State 決定。
+6. Difference Array 與 Event Sweep 都使用端點差值，差別在是否為整個值域準備空間。
+7. Coordinate Compression 保留順序與相等，不保留距離。
+8. 點壓縮適合排名與 Count；區段壓縮適合 Length 與 Area。
+9. 相同 Sweep 座標的資料是否互相影響，是 Tie-breaking 與 Grouping 的核心問題。
+10. Fenwick Tree、Segment Tree 與 Rectangle Area 都是基礎 Sweep 的延伸，不需要第一次閱讀就全部掌握。
