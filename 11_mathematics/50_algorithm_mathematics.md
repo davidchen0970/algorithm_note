@@ -2,7 +2,9 @@
 
 ### 適用範圍
 
-本章不是公式清單，而是一條由淺入深的解題路線。每個主題都先回答「它在解什麼問題」，再建立直覺、推導性質、寫出 C++，最後補充邊界條件與常見錯誤。
+本章假設讀者目前會寫基本函式、`if`、`for`、`while`、遞迴與 `%`，但還不熟悉數學證明。每個主題都從最短、最容易讀懂的版本開始，再逐步補上原因、邊界條件與較完整的寫法。
+
+閱讀時不需要一次記住全部公式。每節先掌握「這個工具在解什麼問題」以及「最基本的程式怎麼寫」。證明、Overflow 與進階變形可以留到第二輪。
 
 本章依序處理：
 
@@ -28,13 +30,15 @@
 
 #### 第一輪必讀
 
-先讀 50.1 至 50.7，掌握：
+先讀 50.1 至 50.7。第一輪只要求做到：
 
-- 整除、因數與倍數。
-- GCD 的意義。
-- Euclidean Algorithm。
-- 字串共同週期案例。
-- LCM 與同步問題。
+- 看懂 `a % b == 0` 表示可以整除。
+- 會寫最短的遞迴 GCD。
+- 知道 `gcd(a, b)` 是最大的共同分割單位。
+- 能跟著步驟理解字串最大公因數的直覺解。
+- 知道 GCD 與 LCM 分別在回答不同問題。
+
+第一輪如果看不懂數學證明，可以先略過「為什麼 Euclidean Algorithm 成立」。只要先會追蹤每次函式呼叫即可。
 
 #### 第二輪再讀
 
@@ -290,79 +294,213 @@ const auto value = std::gcd(a, b);
 
 ### 50.4 Euclidean Algorithm
 
-#### 為什麼需要另一種方法
+#### 這一節先只學一小段程式
 
-逐一列舉共同因數，沒有使用餘數中已經存在的資訊。Euclidean Algorithm 利用：
+如果你目前只會下面這個版本，完全足夠作為本節的起點：
 
-```text
-gcd(a, b) = gcd(b, a mod b)
+```cpp
+int gcd(int a, int b)
+{
+    if (b == 0)
+    {
+        return a;
+    }
+
+    return gcd(b, a % b);
+}
 ```
 
-反覆把問題縮小，直到餘數為 0。
+先不要急著背證明。第一輪只要回答兩個問題：
 
-#### 先看一個例子
+1. 什麼時候停止？
+2. 下一次遞迴傳入哪兩個數？
 
-計算：
+#### 第一行：函式收到兩個整數
 
-```text
+```cpp
+int gcd(int a, int b)
+```
+
+這個函式要計算 `a` 與 `b` 的最大公因數。
+
+例如：
+
+```cpp
 gcd(48, 18)
 ```
 
-依序得到：
+代表要找 48 與 18 的最大公因數。
 
-```text
-48 = 18 × 2 + 12
-18 = 12 × 1 + 6
-12 =  6 × 2 + 0
+#### 第二步：`b == 0` 就停止
+
+```cpp
+if (b == 0)
+{
+    return a;
+}
 ```
 
-最後一個非零餘數是 6，所以：
+當第二個數變成 0 時，第一個數就是答案。
+
+可以先把它當成遞迴的停止條件：
+
+```text
+gcd(a, 0) = a
+```
+
+#### 第三步：否則把問題變小
+
+```cpp
+return gcd(b, a % b);
+```
+
+下一次呼叫會把：
+
+```text
+原本的 b       變成新的 a
+原本的 a % b   變成新的 b
+```
+
+其中 `%` 是取餘數。
+
+#### 完整追蹤 `gcd(48, 18)`
+
+```text
+gcd(48, 18)
+    48 % 18 = 12
+    ↓
+gcd(18, 12)
+    18 % 12 = 6
+    ↓
+gcd(12, 6)
+    12 % 6 = 0
+    ↓
+gcd(6, 0)
+    b == 0
+    return 6
+```
+
+所以：
 
 ```text
 gcd(48, 18) = 6
 ```
 
-#### 核心性質為什麼成立
-
-令：
+#### 再走一次 `gcd(6, 4)`
 
 ```text
-a = bq + r
+gcd(6, 4)
+    6 % 4 = 2
+    ↓
+gcd(4, 2)
+    4 % 2 = 0
+    ↓
+gcd(2, 0)
+    return 2
+```
+
+因此：
+
+```text
+gcd(6, 4) = 2
+```
+
+這個結果稍後會用於字串題：長度 6 與長度 4 的最大共同分割單位是 2。
+
+#### 建議先自己練習追蹤
+
+先不要看答案，依照相同方式展開：
+
+```cpp
+gcd(12, 8)
+gcd(15, 6)
+gcd(7, 3)
+```
+
+答案分別是：
+
+```text
+4
+3
+1
+```
+
+如果能看懂每次 `a % b` 產生什麼餘數，就已經掌握這段程式的執行流程。
+
+#### 為什麼可以把 `(a, b)` 換成 `(b, a % b)`
+
+這一段是第二輪內容。第一次閱讀可以先略過。
+
+假設：
+
+```text
+a = b × q + r
 ```
 
 其中：
 
 ```text
-r = a mod b
+r = a % b
 ```
 
-若某個數 `d` 同時整除 `a` 與 `b`，它也會整除：
+如果某個數可以同時整除 `a` 和 `b`，它也能整除：
 
 ```text
-a - bq = r
+a - b × q
 ```
 
-反過來，若 `d` 同時整除 `b` 與 `r`，它也會整除：
+而：
 
 ```text
-bq + r = a
+a - b × q = r
 ```
 
-因此 `(a, b)` 與 `(b, r)` 具有相同共同因數，最大公因數也相同。
+所以，`a` 與 `b` 的共同因數，也會是 `b` 與 `r` 的共同因數。
 
-#### 迭代版本
+反過來也成立，因此：
+
+```text
+gcd(a, b) = gcd(b, a % b)
+```
+
+這就是 Euclidean Algorithm 的核心性質。
+
+#### 稍微完整的版本：處理負數
+
+題目若只給正整數，前面的短版本已足夠。若輸入可能為負數，可以先取絕對值：
 
 ```cpp
 #include <cstdlib>
 
-long long gcdIterative(long long a, long long b)
+int gcd(int a, int b)
 {
-    a = std::llabs(a);
-    b = std::llabs(b);
+    a = std::abs(a);
+    b = std::abs(b);
+
+    if (b == 0)
+    {
+        return a;
+    }
+
+    return gcd(b, a % b);
+}
+```
+
+#### 不使用遞迴的版本
+
+遞迴版本看懂後，才需要看迴圈版本：
+
+```cpp
+#include <cstdlib>
+
+int gcdIterative(int a, int b)
+{
+    a = std::abs(a);
+    b = std::abs(b);
 
     while (b != 0)
     {
-        const long long remainder = a % b;
+        const int remainder = a % b;
         a = b;
         b = remainder;
     }
@@ -371,44 +509,54 @@ long long gcdIterative(long long a, long long b)
 }
 ```
 
-#### 遞迴版本
+它與遞迴版本做相同的事：不斷將 `(a, b)` 更新成 `(b, a % b)`，直到 `b == 0`。
+
+#### C++ 已提供 `std::gcd`
+
+實際解題可以使用：
 
 ```cpp
-#include <cstdlib>
+#include <numeric>
 
-long long gcdRecursive(long long a, long long b)
-{
-    if (b == 0)
-    {
-        return std::llabs(a);
-    }
-
-    return gcdRecursive(b, a % b);
-}
+const int answer = std::gcd(a, b);
 ```
+
+但仍建議先看懂自己的遞迴版本，因為它能幫助你理解 GCD 為什麼很快，以及後續題目如何使用它。
 
 #### 邊界情況
 
+對非負整數：
+
 ```text
-gcd(a, 0) = |a|
-gcd(0, b) = |b|
-gcd(0, 0) = 0    // C++ std::gcd 的定義
+gcd(a, 0) = a
+gcd(0, b) = b
+gcd(0, 0) = 0
 ```
 
-題目若要求「最大正共同因數」，通常不會同時給兩個 0，或需要另外定義語意。
+如果題目只給正整數，不需要先處理所有邊界。先依題目條件寫出正確版本，再視需要補強。
 
 #### 複雜度
 
-Euclidean Algorithm 的時間複雜度通常寫成：
+時間複雜度通常寫成：
 
 ```text
-O(log min(|a|, |b|))
+O(log min(a, b))
 ```
 
-它比從 `min(a, b)` 向下列舉快得多。
+第一輪不需要推導這個式子。只要知道每次取餘數後，第二個數會快速變小，因此比從 `min(a, b)` 一路向下嘗試快很多。
 
 
 ### 50.5 完整案例：字串的最大公因數
+
+#### 閱讀目標
+
+這一節不要求你一開始就想到三行最佳解。請依序完成三個層次：
+
+1. 看懂「某個 Pattern 能否重複形成完整字串」。
+2. 看懂列舉 Prefix 的直覺解。
+3. 最後才把候選長度換成剛學過的 `gcd`。
+
+只會寫 50.4 的遞迴 `gcd` 已經足以閱讀本節，不需要先懂其他數論。
 
 #### 這題為什麼放在數學章
 
@@ -555,11 +703,20 @@ second + first  = "CODELEET"
 
 兩者不同，代表不存在共同重複 Pattern。
 
-#### 最終解法
+#### 最終解法：先使用自己會寫的 `gcd`
 
 ```cpp
-#include <numeric>
 #include <string>
+
+int gcd(int a, int b)
+{
+    if (b == 0)
+    {
+        return a;
+    }
+
+    return gcd(b, a % b);
+}
 
 std::string gcdOfStrings(
     const std::string& first,
@@ -570,12 +727,32 @@ std::string gcdOfStrings(
         return "";
     }
 
-    const std::size_t gcdLength =
-        std::gcd(first.size(), second.size());
+    const int gcdLength = gcd(
+        static_cast<int>(first.size()),
+        static_cast<int>(second.size()));
 
-    return first.substr(0, gcdLength);
+    return first.substr(
+        0,
+        static_cast<std::size_t>(gcdLength));
 }
 ```
+
+這段只做三件事：
+
+1. 串接順序不同，代表沒有共同 Pattern，回傳空字串。
+2. 使用你已經會寫的 `gcd` 計算最大共同長度。
+3. 從 `first` 開頭取出該長度。
+
+等這個版本看熟後，才把自訂 `gcd` 換成標準函式：
+
+```cpp
+#include <numeric>
+
+const std::size_t gcdLength =
+    std::gcd(first.size(), second.size());
+```
+
+兩種版本的數學意思相同。
 
 #### 為什麼不能只取 GCD 長度
 
