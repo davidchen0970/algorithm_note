@@ -54,7 +54,7 @@
 - [第四步：使用 Two Pointers 判斷回文](#66-第四步使用-two-pointers-判斷回文)：處理比較規則與邊界。
 - [完整案例：忽略非英數字元的回文](#67-完整案例忽略非英數字元的回文)：整合 Normalize 與 Two Pointers。
 - [第五步：進行頻率統計](#68-第五步進行頻率統計)：依值域選擇 Array 或 Hash Map。
-- [第六步：理解 Substring 的複製成本](#69-第六步理解-substring-的複製成本)：比較 `substr`、Index 與 View。
+- [第六步：理解 Substring 的複製成本](#69-第六步理解-substring-的複製成本)：比較 `substr`、Index 與 View，並釐清切片與搜尋的分工。
 - [第七步：管理 string_view 的生命週期](#610-第七步管理-string_view-的生命週期)：區分 View 與 Ownership。
 - [第八步：有效率地建構字串](#611-第八步有效率地建構字串)：使用 `reserve`、`push_back` 與尾端追加。
 - [第九步：建立清楚的解析規格](#612-第九步建立清楚的解析規格)：處理 Delimiter、空 Token 與尾端資料。
@@ -152,22 +152,18 @@ A man, a plan, a canal: Panama
 
 這不是哪一個演算法比較正確，而是 Postcondition 不同。Normalize 規則必須先定義。
 
-#### Normalize 不一定要建立新字串
+#### 比較規則不代表一定要先修改字串
 
-一種作法是先建立正規化結果：
+「忽略非英數字元」與「英文字母不區分大小寫」描述的是比較規則，不代表一定要先建立修改後的新字串。
 
-```text
-amanaplanacanalpanama
-```
+實作時可以選擇：
 
-再判斷回文。另一種作法是在 Two Pointers 移動時略過不需要比較的 Bytes，並在比較當下轉成相同大小寫。後者可避免建立完整副本，但控制流程較複雜。
+- 先依比較規則建立新字串，再進行後續演算法。
+- 走訪原字串時略過不需要比較的 Bytes，並在比較當下轉換大小寫。
 
-選擇哪一種方式，應考慮：
+兩種方式應遵守相同的比較規格。前者將資料整理與演算法分開，控制流程通常較單純；後者不建立完整副本，但需要在走訪過程中同時處理略過規則與邊界。
 
-- 可讀性。
-- 是否允許額外 O(n) 空間。
-- Normalize 結果是否會重複使用。
-- 輸入是否限定為 ASCII。
+本節先定義比較規格，具體的空間取捨會在 6.7 的回文案例中說明。
 
 #### 區間仍建議使用 Half-open Interval
 
@@ -556,7 +552,20 @@ bool isNormalizedPalindrome(std::string_view text)
 2. 已配對內容在忽略大小寫後相同。
 3. `[left, right)` 是尚未處理範圍。
 
-略過非英數 Byte 不會改變 Normalize 後的字串，因此 Invariant 仍成立。
+略過非英數 Byte 不會改變依比較規則所得到的字元序列，因此 Invariant 仍成立。
+
+#### 為什麼不先建立整理後的字串
+
+本案例在 Two Pointers 移動時直接略過非英數 Byte，並在比較當下轉成小寫，因此不需要建立完整副本，額外空間為 O(1)。
+
+另一種作法是先建立只包含小寫英數字元的新字串，再用一般回文方法比較。這種寫法通常較容易拆解與測試，但需要 O(n) 額外空間。
+
+選擇時可考慮：
+
+- 整理後的結果是否會重複使用。
+- 是否允許 O(n) 額外空間。
+- 將整理流程與比較流程分開後，是否更容易閱讀與測試。
+- 輸入是否確實限定為 ASCII；若不是，分類與大小寫轉換規則需要另行定義。
 
 #### 邊界案例
 
@@ -672,8 +681,13 @@ bool areAnagrams(
 
     for (std::size_t i = 0; i < first.size(); ++i)
     {
-        ++difference[first[i] - 'a'];
-        --difference[second[i] - 'a'];
+        const auto firstIndex =
+            static_cast<std::size_t>(first[i] - 'a');
+        const auto secondIndex =
+            static_cast<std::size_t>(second[i] - 'a');
+
+        ++difference[firstIndex];
+        --difference[secondIndex];
     }
 
     for (int value : difference)
@@ -766,7 +780,9 @@ bool solve(std::string_view text)
 
 `string_view::substr` 建立新 View，不複製底層字元。但 View 不擁有資料，原始字串必須在所有遞迴呼叫期間保持有效。
 
-#### 6.9.1 名詞對照與實戰：從定義到程式碼
+#### 6.9.1 從共同子串問題理解 `substr` 的角色
+
+本節不是要完整介紹所有共同子串演算法，而是透過常見問題區分「尋找區間」與「取得區間內容」兩件事。暴力法與 DP 用來決定答案的位置和長度，`substr` 則在區間已知後建立結果字串。相關演算法會在後續的 Dynamic Programming 與 String Matching 章節進一步展開。
 
 看到 `substr` 時，可以先把問題拆成三層：
 
@@ -815,8 +831,7 @@ int main()
     if (s1.find(pattern) != std::string::npos &&
         s2.find(pattern) != std::string::npos)
     {
-        std::cout << pattern << " is a common substring
-";
+        std::cout << pattern << " is a common substring\n";
     }
 }
 ```
