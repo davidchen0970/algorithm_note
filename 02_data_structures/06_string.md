@@ -766,6 +766,165 @@ bool solve(std::string_view text)
 
 `string_view::substr` 建立新 View，不複製底層字元。但 View 不擁有資料，原始字串必須在所有遞迴呼叫期間保持有效。
 
+#### 6.9.1 名詞對照與實戰：從定義到程式碼
+
+看到 `substr` 時，可以先把問題拆成三層：
+
+1. 定義層：題目要的是連續的 Substring，還是可跳過元素的 Subsequence。
+2. 工具層：`std::string::substr` 只負責從已知位置切出一段連續內容。
+3. 搜尋層：若還不知道答案在哪裡，需要另外用 `find`、雙迴圈、Sliding Window、DP 或其他字串搜尋方法。
+
+`substr` 的角色比較像「切片工具」，不是「搜尋工具」。例如：
+
+```cpp
+std::string text = "abcde";
+std::string part = text.substr(1, 3); // "bcd"
+```
+
+這裡的第二個參數是 Count，也就是要取幾個 Bytes。若用 Half-open Interval 表示同一段範圍，`"bcd"` 是 `[1, 4)`，因此應寫成：
+
+```cpp
+std::string part = text.substr(1, 4 - 1);
+```
+
+若寫成 `text.substr(1, 4)`，意思會變成「從 Index 1 開始取 4 個 Bytes」，結果是 `"bcde"`。
+
+##### 找共同子串不是改寫 substr
+
+若題目給兩個字串，要求找出共同的連續片段，真正要處理的是「搜尋兩個字串中相同的連續區間」。最後可以用 `substr` 把答案切出來，但答案的位置與長度要先由演算法決定。
+
+例如：
+
+```cpp
+std::string s1 = "abcabc";
+std::string s2 = "abcabcabcabc";
+```
+
+若只是判斷固定 Pattern `"abc"` 是否同時出現在兩個字串中，可以使用 `find`：
+
+```cpp
+#include <iostream>
+#include <string>
+
+int main()
+{
+    std::string s1 = "abcabc";
+    std::string s2 = "abcabcabcabc";
+    std::string pattern = "abc";
+
+    if (s1.find(pattern) != std::string::npos &&
+        s2.find(pattern) != std::string::npos)
+    {
+        std::cout << pattern << " is a common substring
+";
+    }
+}
+```
+
+若要自動找出最長共同 Substring，可以先用雙迴圈建立概念：
+
+```cpp
+#include <string>
+
+std::string longestCommonSubstring(
+    const std::string& first,
+    const std::string& second)
+{
+    std::size_t bestBegin = 0;
+    std::size_t bestLength = 0;
+
+    for (std::size_t i = 0; i < first.size(); ++i)
+    {
+        for (std::size_t j = 0; j < second.size(); ++j)
+        {
+            std::size_t length = 0;
+            while (i + length < first.size() &&
+                   j + length < second.size() &&
+                   first[i + length] == second[j + length])
+            {
+                ++length;
+            }
+
+            if (length > bestLength)
+            {
+                // bestBegin 記錄 first 中該段連續區間的起始位置。
+                // 因為本次配對都以目前的 i 為基準。
+                bestBegin = i;
+                bestLength = length;
+            }
+        }
+    }
+
+    return first.substr(bestBegin, bestLength);
+}
+```
+
+這段流程中，雙迴圈負責選擇兩個起點，`while` 負責同步往右比對。一旦遇到不同 Byte，本次連續片段就結束。`substr` 只在最後使用，用來切出已經找到的區間。
+
+##### 最長共同子串的 DP 狀態
+
+若輸入較長，暴力比對最壞情況可能需要 `O(n * m * min(n, m))` 時間。DP 可將時間降為 `O(n * m)`。
+
+定義：
+
+```text
+dp[i][j] = first[0, i) 與 second[0, j) 中，
+           以 first[i - 1] 和 second[j - 1] 結尾的最長共同後綴長度
+```
+
+轉移規則：
+
+- 若 `first[i - 1] == second[j - 1]`，則 `dp[i][j] = dp[i - 1][j - 1] + 1`。
+- 若不同，則 `dp[i][j] = 0`。因為 Substring 必須連續，中間斷開後不能沿用前面的長度。
+
+```cpp
+#include <string>
+#include <vector>
+
+std::string longestCommonSubstringDp(
+    const std::string& first,
+    const std::string& second)
+{
+    const std::size_t n = first.size();
+    const std::size_t m = second.size();
+
+    std::vector<std::vector<std::size_t>> dp(
+        n + 1,
+        std::vector<std::size_t>(m + 1, 0));
+
+    std::size_t bestLength = 0;
+    std::size_t bestEnd = 0;
+
+    for (std::size_t i = 1; i <= n; ++i)
+    {
+        for (std::size_t j = 1; j <= m; ++j)
+        {
+            if (first[i - 1] == second[j - 1])
+            {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+                if (dp[i][j] > bestLength)
+                {
+                    bestLength = dp[i][j];
+                    bestEnd = i;
+                }
+            }
+        }
+    }
+
+    return first.substr(bestEnd - bestLength, bestLength);
+}
+```
+
+這個 DP 狀態只從左上角轉移。左上角代表兩邊前一個位置也必須配對成功，因此它自然保留了 Substring 的連續性。
+
+<table>
+<tr><th>題目用語</th><th>通常代表</th><th>常見方法</th></tr>
+<tr><td>連續片段、Substring、子字串</td><td>`[left, right)` 連續區間</td><td>Sliding Window、雙迴圈、DP</td></tr>
+<tr><td>保持順序、可刪除部分字元、Subsequence</td><td>可跳過元素，但順序不能改</td><td>Two Pointers、DP</td></tr>
+<tr><td>某個 Pattern 是否出現</td><td>固定字串搜尋</td><td>`find`、KMP、Rolling Hash</td></tr>
+<tr><td>最長共同子串</td><td>兩字串中的最長連續共同片段</td><td>DP、Suffix Array、Suffix Automaton</td></tr>
+</table>
+
 ### 6.10 第七步：管理 string_view 的生命週期
 
 `std::string_view` 保存的是：
@@ -1147,6 +1306,25 @@ bool append_char(
 <tr><td>含 Null Byte 的資料被截短</td><td>傳給依賴 C String 的介面</td><td>改用 Pointer 加 Length 介面</td></tr>
 </table>
 
+
+
+#### 針對 `substr` 與共同子串的判讀
+
+- 若已經知道 `[left, right)`，可以用 `text.substr(left, right - left)` 切出結果。
+- 若尚未知道共同片段在哪裡，應先寫搜尋邏輯，再使用 `substr` 輸出答案。
+- 若只判斷固定 Pattern 是否存在，可先考慮 `find`。
+- 若要最長共同 Substring，可使用雙迴圈或 DP。
+- 若要最長共同 Subsequence，問題模型不同，不能沿用同一個 DP 轉移式。
+
+<table>
+<tr><th>問題</th><th>判讀方向</th><th>檢查重點</th></tr>
+<tr><td>`substr(1, 4)` 為什麼得到 `bcde`？</td><td>第二個參數是 Count</td><td>若目標是 `[1, 4)`，應傳 `4 - 1`</td></tr>
+<tr><td>兩個字串要找共同片段</td><td>這是搜尋問題</td><td>`substr` 只適合在已知區間後切出答案</td></tr>
+<tr><td>`abc` 和 `abcabc` 都是共同子串，該回傳誰？</td><td>看 Postcondition</td><td>若要求最長，應回傳較長且連續的那段</td></tr>
+<tr><td>DP 遇到不同字元時為什麼歸零？</td><td>Substring 必須連續</td><td>斷開後不能延續前一段共同長度</td></tr>
+<tr><td>能不能用 `string_view` 取代所有 `substr`？</td><td>只能在生命週期安全時使用</td><td>確認原資料是否仍存在且位置穩定</td></tr>
+</table>
+
 ### 6.16 本章檢查表
 
 - 我知道 `std::string` 的 `size()` 回傳 Byte 數量。
@@ -1155,6 +1333,8 @@ bool append_char(
 - 我會先定義大小寫、空白、標點與其他 Normalize 規則。
 - 我能區分 Substring、Subsequence 與 Subset。
 - 我知道 `substr(position, count)` 的第二個參數是長度，不是右邊界。
+- 我知道 `substr` 是切片工具，不負責搜尋兩個字串的共同片段。
+- 我能區分固定 Pattern 搜尋、最長共同子串與最長共同子序列。
 - 我能用雙 Index 與 Invariant 說明 Subsequence 判斷。
 - 我能使用不發生 Unsigned Underflow 的回文區間。
 - 我知道 ASCII 回文方法不能直接代表完整 Unicode 文字處理。
@@ -1181,6 +1361,7 @@ bool append_char(
 - ASCII 常可用一個 Byte 表示一個字元，但 UTF-8 使用可變數量 Bytes。
 - 字串題開始前，應先確認編碼、比較單位與 Normalize 規則。
 - Substring 必須連續；Subsequence 可跳過元素，但必須保持原順序。
+- `std::string::substr` 適合在已知位置與長度後切出結果；共同子串問題仍需要搜尋方法先決定區間。
 - Two Pointers 適合由左右兩端比較回文，Half-open Interval 可安全處理空字串。
 - `<cctype>` 函式的 `char` 輸入應先轉成 `unsigned char`。
 - 頻率資料結構由字元值域決定，固定 Array 需要明確 Precondition。
