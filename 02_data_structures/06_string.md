@@ -1,89 +1,293 @@
-## 第 6 章　String 與字元處理
+# 第 6 章　String 與字元處理
 
-### 適用範圍
+## 適用範圍
 
-本章介紹字串的資料模型，以及字串題中經常混在一起的 Byte、字元、編碼、區間與生命週期問題。
+本章從最基本的 `std::string` 使用方式開始，逐步建立字串題需要的觀念。第一次閱讀時，不需要先理解 Unicode、Dynamic Programming 或 `string_view` 的全部細節。每一節都會先說明「目前要解決什麼問題」，再建立直覺、寫出程式，最後補上邊界與進階內容。
 
-`std::string` 的介面看起來和 Array 相似，可以取得長度、以 Index 存取、走訪與建立子字串。但字串多了一層編碼語意。若輸入只包含 ASCII，一個可見字元通常對應一個 Byte；若使用 UTF-8，一個可見字元可能由多個 Bytes 組成。因此，在開始寫迴圈前，需要先確認演算法處理的是：
+本章依照下列順序前進：
 
-- Byte。
-- ASCII 字元。
-- Unicode Code Point。
-- 使用者看到的完整字形。
+1. 先把 `std::string` 當成可以依序存放 `char` 的容器。
+2. 學會長度、Index、走訪與區間。
+3. 再釐清 Byte、ASCII 與 UTF-8 的差異。
+4. 分清 Substring 與 Subsequence。
+5. 使用 Two Pointers 解回文。
+6. 使用 Frequency Array 解字元統計與 Anagram。
+7. 理解 `substr` 的功能與複製成本。
+8. 再學習不擁有資料的 `string_view`。
+9. 最後處理字串建構、解析、C String 與 Unicode 邊界。
 
-本章也會說明：
+本章的核心不是記住所有 API，而是每次看到字串題時，能依序回答：
 
-- Substring、Subsequence 與 Subset 的差異。
-- 如何使用 Two Pointers 判斷回文。
-- 如何根據字元範圍選擇 Frequency Array 或 Hash Map。
-- `std::isdigit`、`std::tolower` 等函式的安全呼叫方式。
-- `substr` 的複製成本。
-- `std::string_view` 的非擁有特性與生命週期風險。
-- 如何避免反覆串接造成不必要的資料搬移。
-- 如何使用 Index、Delimiter 與 Token 規格進行字串解析。
+- 我現在處理的是 Byte、ASCII 字元，還是 Unicode 文字？
+- 題目要求連續片段，還是只要求保持順序？
+- 比較時是否忽略大小寫、空白或標點？
+- 我是否在不必要地複製字串？
+- 如果使用 View，原始資料會不會先失效？
 
-本章會建立一套固定流程：
+## 適用讀者
 
-1. 先確認輸入編碼與比較單位。
-2. 明確定義空字串、大小寫與忽略字元規則。
-3. 區分連續 Substring 與可跳過元素的 Subsequence。
-4. 使用 Half-open Interval 表示字串區間。
-5. 根據字元範圍選擇頻率資料結構。
-6. 建立新字串前，評估複製與串接成本。
-7. 使用 `string_view` 前，確認原始資料的 Ownership 與生命週期。
-8. 從空輸入、單一 Byte、多 Byte 文字與 Delimiter 邊界建立測試。
+- 第一次使用 C++ `std::string` 解題的讀者。
+- 容易混淆 Substring、Subsequence 與 Subset 的讀者。
+- 知道 Two Pointers，但不知道如何套用到字串的讀者。
+- 看過 UTF-8、Code Point、Grapheme Cluster 等名詞，但尚未建立清楚關係的讀者。
+- 使用 `substr` 或 `string_view` 時，不清楚複製成本與生命週期的讀者。
+- 需要處理 Token、Delimiter 或 C String 的讀者。
 
-### 適用讀者
+## 閱讀方式
 
-- 需要處理字元走訪、回文、頻率與連續字串問題的讀者。
-- 容易把 Byte 數量當成 Unicode 字元數量的讀者。
-- 常混淆 Substring、Subsequence 與 Subset 的讀者。
-- 在使用 `std::isdigit` 或 `std::tolower` 時遇到不穩定結果的讀者。
-- 遞迴或迴圈中大量呼叫 `substr`，但不清楚複製成本的讀者。
-- 使用 `std::string_view` 後遇到內容異常或懸空 View 的讀者。
-- 需要建立 Token、Delimiter 與空欄位解析規格的讀者。
-- 同時使用 C++ 與 C，希望理解 `std::string` 和 C String 差異的讀者。
+### 第一輪必讀
 
-### 快速導覽
+建議依序閱讀 6.1 至 6.10。第一輪先掌握：
 
-- [String 到底保存什麼](#61-string-到底保存什麼)：區分 Byte、編碼與可見字形。
-- [第一步：先定義字串規格](#62-第一步先定義字串規格)：確認編碼、大小寫與正規化規則。
-- [第二步：安全走訪 Byte 與字元分類](#63-第二步安全走訪-byte-與字元分類)：正確使用 `<cctype>`。
-- [第三步：區分 Substring 與 Subsequence](#64-第三步區分-substring-與-subsequence)：建立連續區間與選取模型。
-- [完整案例：判斷 Subsequence](#65-完整案例判斷-subsequence)：使用雙 Index 與 Invariant。
-- [第四步：使用 Two Pointers 判斷回文](#66-第四步使用-two-pointers-判斷回文)：處理比較規則與邊界。
-- [完整案例：忽略非英數字元的回文](#67-完整案例忽略非英數字元的回文)：整合 Normalize 與 Two Pointers。
-- [第五步：進行頻率統計](#68-第五步進行頻率統計)：依值域選擇 Array 或 Hash Map。
-- [第六步：理解 Substring 的複製成本](#69-第六步理解-substring-的複製成本)：比較 `substr`、Index 與 View，並釐清切片與搜尋的分工。
-- [第七步：管理 string_view 的生命週期](#610-第七步管理-string_view-的生命週期)：區分 View 與 Ownership。
-- [第八步：有效率地建構字串](#611-第八步有效率地建構字串)：使用 `reserve`、`push_back` 與尾端追加。
-- [第九步：建立清楚的解析規格](#612-第九步建立清楚的解析規格)：處理 Delimiter、空 Token 與尾端資料。
-- [C 語言中的字串](#613-c-語言中的字串)：補充 Null Terminator、長度與緩衝區容量。
-- [建立自己的字串分析表](#614-建立自己的字串分析表)：形成固定檢查流程。
-- [常見問題與判讀](#615-常見問題與判讀)：整理常見錯誤與檢查方向。
-- [本章檢查表](#616-本章檢查表)：確認必要觀念是否完整。
-- [本章重點](#617-本章重點)：回顧核心方法。
+- `std::string` 的基本模型。
+- Substring 與 Subsequence 的差異。
+- 回文與頻率統計的基本方法。
+- `substr` 的用途與成本。
 
-### 6.1 String 到底保存什麼
+### 第二輪再讀
 
-`std::string` 可以視為一段連續的 `char` 序列。它保存的是 Bytes，而不是抽象的「人類可見字元」集合。
+6.11 至 6.14 涉及較多 C++ 工程細節，包括 `string_view`、資料生命週期、解析規格與 C String。
+
+### 延伸內容
+
+6.10.1 的最長共同子串 DP 是延伸內容。若尚未學過 Dynamic Programming，可以先看問題分類、暴力解法與 `substr` 的角色，DP 部分可等讀完 Dynamic Programming 章節後再回來。
+
+## 快速導覽
+
+- [6.1 先把 String 當成一排 char](#61-先把-string-當成一排-char)
+- [6.2 長度、Index、走訪與區間](#62-長度index走訪與區間)
+- [6.3 Byte、ASCII 與 UTF-8](#63-byteascii-與-utf-8)
+- [6.4 先定義比較規則](#64-先定義比較規則)
+- [6.5 Substring 與 Subsequence](#65-substring-與-subsequence)
+- [6.6 完整案例：判斷 Subsequence](#66-完整案例判斷-subsequence)
+- [6.7 從最簡單的回文開始](#67-從最簡單的回文開始)
+- [6.8 完整案例：忽略標點與大小寫的回文](#68-完整案例忽略標點與大小寫的回文)
+- [6.9 字元頻率與 Anagram](#69-字元頻率與-anagram)
+- [6.10 substr：切出內容與複製成本](#610-substr切出內容與複製成本)
+- [6.10.1 從共同子串問題理解 substr 的角色](#6101-從共同子串問題理解-substr-的角色)
+- [6.11 string_view：只看資料，不擁有資料](#611-string_view只看資料不擁有資料)
+- [6.12 有效率地建構字串](#612-有效率地建構字串)
+- [6.13 字串解析與 Split](#613-字串解析與-split)
+- [6.14 補充：C String](#614-補充c-string)
+- [6.15 字串題的固定分析流程](#615-字串題的固定分析流程)
+- [6.16 常見問題與判讀](#616-常見問題與判讀)
+- [6.17 本章檢查表](#617-本章檢查表)
+- [6.18 本章重點](#618-本章重點)
+
+---
+
+## 6.1 先把 String 當成一排 char
+
+### 這一節要解決什麼問題
+
+在討論 UTF-8、回文或 `string_view` 以前，先建立最簡單的模型：
+
+> `std::string` 是一個依序存放 `char` 的容器。
+
+先看最基本的字串：
+
+```cpp
+#include <string>
+
+std::string text = "abc";
+```
+
+可以暫時把它想成：
+
+```text
+Index:  0    1    2
+Value: 'a'  'b'  'c'
+```
+
+因此：
+
+```cpp
+text.size();   // 3
+text[0];       // 'a'
+text[1];       // 'b'
+text[2];       // 'c'
+```
+
+這個模型對只含 ASCII 的演算法題非常好用。後面才會補充它在 UTF-8 文字中的限制。
+
+### 字串和 Array 的相似之處
+
+`std::string` 與 Array 或 `std::vector` 有許多相似用法：
+
+- 可以取得元素數量。
+- 可以使用 Index 讀取元素。
+- 可以從左到右走訪。
+- 可以改寫既有元素。
+- 可以在尾端加入內容。
+
+```cpp
+std::string text = "cat";
+text[0] = 'b';
+text.push_back('s');
+
+// text 現在是 "bats"
+```
+
+### 空字串
+
+```cpp
+std::string text;
+```
+
+此時：
+
+```cpp
+text.empty();  // true
+text.size();   // 0
+```
+
+空字串沒有可合法存取的元素，所以不能讀取 `text[0]`。
+
+### `size()` 的型別
+
+`text.size()` 回傳 `std::size_t`，它是 Unsigned Integer Type。常見走訪方式如下：
+
+```cpp
+for (std::size_t i = 0; i < text.size(); ++i)
+{
+    process(text[i]);
+}
+```
+
+因為 `std::size_t` 不表示負數，稍後從右向左走訪時，必須特別注意 `size() - 1` 在空字串上的問題。
+
+### 先記住
+
+- `std::string` 可以依 Index 存取 `char`。
+- 合法 Index 是 `[0, size())`。
+- 空字串的 `size()` 是 0，不能存取 `text[0]`。
+- 目前先假設輸入只含 ASCII，6.3 再處理 UTF-8。
+
+---
+
+## 6.2 長度、Index、走訪與區間
+
+### Range-based for：只需要元素
+
+如果不需要 Index，可以直接走訪每個 `char`：
+
+```cpp
+for (char ch : text)
+{
+    process(ch);
+}
+```
+
+這種寫法適合：
+
+- 計算每個字元的出現次數。
+- 判斷是否包含某種字元。
+- 將每個字元依序輸出。
+
+### Index-based for：需要位置
+
+如果需要目前位置、前一個元素或後一個元素，使用 Index：
+
+```cpp
+for (std::size_t i = 0; i < text.size(); ++i)
+{
+    process(i, text[i]);
+}
+```
+
+### Half-open Interval
+
+本章統一使用 Half-open Interval：
+
+```text
+[begin, end)
+```
+
+它表示：
+
+- 包含 `begin`。
+- 不包含 `end`。
+- 長度是 `end - begin`。
+
+例如，字串 `"abcde"` 中的 `"bcd"` 可以表示為：
+
+```text
+[1, 4)
+```
+
+因為包含 Index 1、2、3，但不包含 Index 4。
+
+### 為什麼使用 `[begin, end)`
+
+它有三個直接好處：
+
+1. 長度就是 `end - begin`。
+2. 空範圍可以寫成 `[x, x)`。
+3. 整個字串可以寫成 `[0, text.size())`。
+
+### `substr` 的第二個參數不是右邊界
+
+```cpp
+std::string part = text.substr(position, count);
+```
+
+第二個參數是數量 `count`，不是 `end`。
+
+若要取出 `[left, right)`：
+
+```cpp
+std::string part = text.substr(left, right - left);
+```
+
+例如：
+
+```cpp
+std::string text = "abcde";
+std::string part = text.substr(1, 3);
+
+// part 是 "bcd"
+```
+
+### 常見錯誤：把右邊界當成數量
+
+```cpp
+std::string part = text.substr(1, 4);
+```
+
+這不是取 `[1, 4)`，而是「從 Index 1 開始取 4 個元素」，結果是 `"bcde"`。
+
+### 先記住
+
+- 只需要元素時用 Range-based for。
+- 需要位置時用 Index。
+- 本章使用 `[begin, end)`。
+- `substr(position, count)` 的第二個參數是數量。
+
+---
+
+## 6.3 Byte、ASCII 與 UTF-8
+
+### 為什麼前面說「先假設 ASCII」
+
+`std::string` 保存的是一段 `char` 序列。更精確地說，我們通常把其中的資料視為 Bytes，而不是直接視為人類看到的完整字元。
+
+如果內容是 ASCII：
 
 ```cpp
 std::string text = "abc";
 ```
 
-若內容只使用 ASCII，可以直觀地畫成：
+通常一個英文字母對應一個 Byte，因此：
 
 ```text
-Index：0   1   2
-Byte： 'a' 'b' 'c'
+text.size() == 3
 ```
 
-此時 `text.size()` 為 3，每個 Index 也剛好對應一個英文字母。
+而且每個 Index 剛好對應一個英文字母。
 
-#### UTF-8 需要分開理解
+### UTF-8 使用可變長度編碼
 
-UTF-8 使用可變長度編碼。一個 Unicode Code Point 可能使用一到四個 Bytes。因此：
+UTF-8 中，一個 Unicode Code Point 可能使用 1 到 4 個 Bytes。因此：
 
 ```cpp
 text.size()
@@ -95,160 +299,174 @@ text.size()
 - 使用者看到的字形數量。
 - 游標移動一次所跨越的文字單位。
 
-例如，某些帶有組合符號的文字可能由多個 Code Points 組成一個可見字形。Emoji 也可能由多個 Code Points 組成。若題目要求「反轉使用者看到的字元」，直接交換 `std::string` 的 Bytes 可能破壞 UTF-8 序列。
+### 三個容易混在一起的層級
 
-#### 先確認處理層級
+#### Byte
 
-<table>
-<tr><th>需求</th><th>可能的處理單位</th><th>注意事項</th></tr>
-<tr><td>只含小寫英文字母的演算法題</td><td>ASCII Byte</td><td>可使用 `ch - 'a'`，但要有明確 Precondition</td></tr>
-<tr><td>檢查通訊資料或檔案前綴</td><td>Byte</td><td>不一定需要解讀成自然語言</td></tr>
-<tr><td>計算 Unicode Code Point</td><td>解碼後的 Code Point</td><td>不能只使用 `size()`</td></tr>
-<tr><td>依使用者可見字形截斷</td><td>Grapheme Cluster</td><td>通常需要 Unicode 函式庫</td></tr>
-</table>
+`std::string` 可以逐 Index 讀到的儲存單位。
 
-演算法題若明確保證只含英文字母或 ASCII，可直接按 Byte 處理。若規格只寫「字串」而沒有說明編碼，應先把這項假設列出。
+#### Unicode Code Point
 
-#### 內含 Null Byte
+Unicode 定義的抽象文字單位，例如某個字母或符號的編號。
 
-`std::string` 可以保存 `\0` Byte，因為它另外記錄長度：
+#### Grapheme Cluster
+
+使用者通常認為的一個完整可見字形。它可能由多個 Code Points 組成，例如基底字母加上組合符號，或由多個 Code Points 組成的 Emoji。
+
+### 為什麼不能直接逐 Byte 反轉 UTF-8
+
+若一個文字單位由多個 Bytes 組成，逐 Byte 交換位置可能打亂編碼順序，產生無效或錯誤文字。
+
+因此，題目若要求：
+
+> 反轉使用者看到的字元
+
+就必須先確認目標單位是 Code Point 還是 Grapheme Cluster，不能直接假設 `text[i]` 是完整字元。
+
+### 什麼情況可以逐 `char` 處理
+
+可以：
+
+- 題目明確保證只含英文字母。
+- 題目明確保證只含 ASCII。
+- 需求本來就是處理原始 Byte 序列。
+
+不應直接如此處理：
+
+- 完整 Unicode 大小寫轉換。
+- 依使用者可見字形反轉。
+- 依 Code Point 計算字數。
+- Unicode 正規化。
+
+### 內含 Null Byte
+
+`std::string` 會另外保存長度，所以內容可以包含 `\0`：
 
 ```cpp
 std::string data{"a\0b", 3};
 ```
 
-此時 `data.size() == 3`。但若把 `data.c_str()` 傳給只依 Null Terminator 判斷長度的 C 介面，對方可能只看到第一個 `a`。跨 C 與 C++ 介面時，需要確認資料是否允許內含 Null Byte。
+此時：
 
-### 6.2 第一步：先定義字串規格
+```cpp
+data.size() == 3
+```
 
-字串題常因為比較規則不明而產生不同答案。開始寫程式前，至少確認以下內容：
+但如果將 `data.c_str()` 傳給只依 `\0` 判斷結尾的 C 介面，對方可能只讀到 `a`。
 
-- 輸入使用哪種編碼。
-- 是否只含 ASCII。
-- 是否區分英文大小寫。
-- 是否忽略空白。
-- 是否忽略標點符號。
-- 是否保留數字。
-- 空字串的答案是什麼。
-- 輸出要求 Byte Index 還是字元位置。
-- 是否允許修改原字串。
+### 本章後續的預設
 
-#### 同一個輸入可能有不同答案
+除非小節另有說明，後續演算法案例都假設輸入是 ASCII，或需求本來就是逐 Byte 比較。
 
-輸入：
+這項限制不是附帶細節，而是演算法正確性的一部分。
+
+### 先記住
+
+- `std::string::size()` 回傳 Byte 數量。
+- ASCII 常可逐 `char` 處理。
+- UTF-8 的一個文字單位可能占用多個 Bytes。
+- 看到「字元」一詞時，要先問它指哪一層。
+
+---
+
+## 6.4 先定義比較規則
+
+### 同一個輸入可能有不同答案
+
+考慮：
 
 ```text
 A man, a plan, a canal: Panama
 ```
 
-若逐 Byte、區分大小寫並保留標點，它不是回文。
+若逐 Byte 比較、區分大小寫並保留標點，它不是回文。
 
-若規格要求：
+若規格改成：
 
 - 忽略非英數字元。
 - 英文字母不區分大小寫。
 
-則它可被判定為回文。
+它就可以被判定為回文。
 
-這不是哪一個演算法比較正確，而是 Postcondition 不同。Normalize 規則必須先定義。
+差異不在於哪個演算法比較正確，而在於兩者的 Postcondition 不同。
 
-#### 比較規則不代表一定要先修改字串
+### 寫程式前先回答
 
-「忽略非英數字元」與「英文字母不區分大小寫」描述的是比較規則，不代表一定要先建立修改後的新字串。
+- 輸入是否只含 ASCII？
+- 是否區分英文大小寫？
+- 是否忽略空白？
+- 是否忽略標點？
+- 是否保留數字？
+- 空字串的答案是什麼？
+- 輸出位置是 Byte Index，還是其他文字單位的位置？
+- 是否允許修改輸入字串？
 
-實作時可以選擇：
+### 比較規則不代表一定要先修改字串
 
-- 先依比較規則建立新字串，再進行後續演算法。
-- 走訪原字串時略過不需要比較的 Bytes，並在比較當下轉換大小寫。
+「忽略非英數字元」描述的是如何比較，不代表一定要先建立修改後的新字串。
 
-兩種方式應遵守相同的比較規格。前者將資料整理與演算法分開，控制流程通常較單純；後者不建立完整副本，但需要在走訪過程中同時處理略過規則與邊界。
+可以選擇兩種方向：
 
-本節先定義比較規格，具體的空間取捨會在 6.7 的回文案例中說明。
-
-#### 區間仍建議使用 Half-open Interval
-
-字串區間可寫成 `[begin, end)`：
+#### 方向一：先整理，再執行演算法
 
 ```text
-長度 = end - begin
+原字串
+    ↓ 移除不需要的內容、統一大小寫
+整理後的新字串
+    ↓
+回文比較
 ```
 
-`std::string::substr(position, count)` 的第二個參數是數量，不是右邊界。若要複製 `[left, right)`：
+優點：
 
-```cpp
-std::string part = text.substr(left, right - left);
+- 整理與比較分開，容易閱讀。
+- 整理後結果可重複使用。
+- 每個階段容易單獨測試。
+
+代價：
+
+- 需要建立新字串。
+- 通常需要 O(n) 額外空間。
+
+#### 方向二：走訪時直接套用規則
+
+```text
+原字串
+    ↓ 指標移動時略過不需要的內容
+直接比較
 ```
 
-常見錯誤是把 `right` 直接當成 `count`，導致範圍過長。
+優點：
 
-### 6.3 第二步：安全走訪 Byte 與字元分類
+- 不必建立完整副本。
+- 回文案例可以做到 O(1) 額外空間。
 
-若規格限定 ASCII，可像 Array 一樣走訪：
+代價：
 
-```cpp
-for (char ch : text)
-{
-    process(ch);
-}
-```
+- 迴圈同時處理略過、轉換與比較。
+- 邊界條件較多。
 
-若需要 Index：
+6.8 會完整比較這兩種方式。
 
-```cpp
-for (std::size_t i = 0; i < text.size(); ++i)
-{
-    process(text[i]);
-}
-```
+### 用詞提醒
 
-#### `<cctype>` 的參數限制
+本章前半部若提到「整理比較內容」，主要指忽略標點、忽略空白或統一 ASCII 大小寫。Unicode Normalization Form 是另一個更完整的文字規格，不應直接混為一談。
 
-`std::isdigit`、`std::isalpha`、`std::isalnum`、`std::tolower` 等函式，接受的值必須可表示為 `unsigned char`，或等於 `EOF`。若直接傳入負值的 `char`，行為可能未定義。
+### 先記住
 
-安全包裝方式：
+- 比較規則必須先定義。
+- 規格描述「比較什麼」，實作再決定「何時整理」。
+- 不要還沒確認規格，就先選演算法。
 
-```cpp
-#include <cctype>
+---
 
-bool isDigit(char ch)
-{
-    const auto value = static_cast<unsigned char>(ch);
-    return std::isdigit(value) != 0;
-}
-```
+## 6.5 Substring 與 Subsequence
 
-轉成小寫：
+這兩個詞很像，但它們描述不同的候選結構。
 
-```cpp
-char toLowerAscii(char ch)
-{
-    const auto value = static_cast<unsigned char>(ch);
-    return static_cast<char>(std::tolower(value));
-}
-```
+### Substring：連續區間
 
-這些函式也可能受目前 Locale 影響。若題目只處理 ASCII，可以直接寫出 ASCII 範圍條件，讓規格更明確：
-
-```cpp
-bool isAsciiDigit(char ch)
-{
-    return ch >= '0' && ch <= '9';
-}
-```
-
-#### `char` 不保證是 Signed 或 Unsigned
-
-`char` 是否視為 Signed 由執行環境決定。這也是呼叫 `<cctype>` 函式前先轉成 `unsigned char` 的原因之一。
-
-#### Byte Index 不一定是字元 Index
-
-對 UTF-8 文字，`text[i]` 可能只取到某個多 Byte 編碼的一部分。若演算法以 `i + 1` 表示「下一個 Unicode 字元」，邏輯就不成立。此時需要使用 UTF-8 解碼器或適當的 Unicode 函式庫，而不是逐 Byte 套用 ASCII 分類函式。
-
-### 6.4 第三步：區分 Substring 與 Subsequence
-
-#### Substring
-
-Substring 是原字串中的連續區間。
+Substring 是原字串中的連續片段。
 
 對：
 
@@ -265,11 +483,13 @@ e
 空字串
 ```
 
-若使用 `[left, right)` 表示，Substring 就是原字串的一段連續 Index 範圍。
+`ace` 不是 Substring，因為它在原字串中不連續。
 
-#### Subsequence
+用區間表示時，Substring 就是一段 `[left, right)`。
 
-Subsequence 保留原本順序，但可以跳過元素。
+### Subsequence：保持順序，可以跳過
+
+Subsequence 必須保留原順序，但可以跳過部分元素。
 
 ```text
 ace
@@ -277,54 +497,105 @@ ace
 
 是 `abcde` 的 Subsequence，因為可以依序選取 Index 0、2、4。
 
-但 `ace` 不是 Substring，因為它不連續。
+但：
 
-#### Subset
+```text
+aec
+```
 
-Subset 通常不保留原本順序概念，只關心選了哪些元素。字串題大多使用 Substring 或 Subsequence，不應只看到「選一些字元」就忽略順序。
+不是 `abcde` 的 Subsequence，因為順序改變了。
 
-<table>
-<tr><th>結構</th><th>要求連續</th><th>要求保留順序</th><th>常見表示</th></tr>
-<tr><td>Substring</td><td>是</td><td>是</td><td>區間 `[left, right)`</td></tr>
-<tr><td>Subsequence</td><td>否</td><td>是</td><td>依序選取 Index</td></tr>
-<tr><td>Subset</td><td>否</td><td>通常不強調</td><td>每個元素選或不選</td></tr>
-</table>
+### Subset：通常不處理順序
 
-#### 問題模型會影響演算法
+Subset 通常只關心選了哪些元素，不強調原本順序。字串題多半問 Substring 或 Subsequence，不能看到「選一些字元」就忽略順序。
 
-- 最長不重複 Substring 常使用 Sliding Window。
-- 判斷某字串是否為 Subsequence 常使用 Two Pointers。
-- 列舉所有 Subsequence 常使用遞迴或 Backtracking。
+### 用一張圖建立直覺
 
-三者名稱相似，但候選空間不同。
+```text
+原字串： a b c d e
+Index：  0 1 2 3 4
 
-### 6.5 完整案例：判斷 Subsequence
+Substring "bcd"：
+          └─────┘       連續
 
-#### 問題規格
+Subsequence "ace"：
+          ↑   ↑   ↑     可以跳過，但順序不變
+```
+
+### 題目用語如何判斷
+
+常見線索：
+
+- 「連續片段」、「子字串」：通常是 Substring。
+- 「刪除若干字元後得到」、「保持相對順序」：通常是 Subsequence。
+- 「任選若干元素」、「不考慮順序」：可能是 Subset。
+
+### 問題模型會改變解法
+
+- 最長不重複 Substring：常用 Sliding Window。
+- 判斷是否為 Subsequence：常用 Two Pointers。
+- 最長共同 Subsequence：常用 Dynamic Programming。
+- 最長共同 Substring：也可用 Dynamic Programming，但狀態轉移不同。
+
+先分清問題模型，再選方法。
+
+---
+
+## 6.6 完整案例：判斷 Subsequence
+
+### 問題
 
 給定 `candidate` 與 `text`，判斷 `candidate` 是否為 `text` 的 Subsequence。
 
 ```text
 candidate = "ace"
-text = "abcde"
-答案 = true
+text      = "abcde"
+答案      = true
 ```
 
-#### Precondition
+### 先用人類方式思考
 
-本案例按 `std::string` 的 Byte 比較，適用於題目已保證 ASCII，或需求本來就是比較 Byte 序列。
+我們想依序在 `text` 中找到：
 
-#### Postcondition
+1. 先找 `a`。
+2. 找到後，再往右找 `c`。
+3. 找到後，再往右找 `e`。
+4. 全部找到就成功。
 
-回傳 `true`，若且唯若存在嚴格遞增的 Index：
+重點是不能回頭。
+
+### 需要記住什麼狀態
+
+只需要一個 Index：
 
 ```text
-i0 < i1 < ... < ik
+matched = 下一個想在 text 中找到的 candidate 位置
 ```
 
-使 `candidate[j] == text[ij]`。
+開始時：
 
-#### C++ 解法
+```text
+matched = 0
+```
+
+表示下一個要找 `candidate[0]`。
+
+### 逐步走一次
+
+```text
+candidate = a c e
+text      = a b c d e
+
+看到 a：等於 candidate[0]，matched 變成 1
+看到 b：不等於 candidate[1]，略過
+看到 c：等於 candidate[1]，matched 變成 2
+看到 d：不等於 candidate[2]，略過
+看到 e：等於 candidate[2]，matched 變成 3
+
+matched == candidate.size()，成功
+```
+
+### C++ 解法
 
 ```cpp
 #include <string_view>
@@ -348,68 +619,89 @@ bool isSubsequence(
 }
 ```
 
-#### State 意義
+### 為什麼這樣可行
+
+每次遇到下一個需要的字元，就使用目前最早的位置配對。
+
+選擇較早的位置不會減少後方可用範圍。若故意放棄目前位置，改用更晚的相同字元，只會讓剩餘可搜尋範圍更短。
+
+### State 與 Loop Invariant
+
+第一次閱讀可以先理解程式，再讀這一段。
 
 `matched` 表示：
 
-> 已經依序配對完成 `candidate[0, matched)`。
+```text
+candidate[0, matched)
+```
 
-#### Loop Invariant
+已經依序出現在目前走訪過的 `text` Prefix 中。
 
 每輪開始前：
 
-1. `candidate[0, matched)` 是已走訪 `text` Prefix 的 Subsequence。
-2. `matched` 是使用目前已走訪 Prefix 能依序配對出的最長 Candidate Prefix 長度。
-3. `0 <= matched <= candidate.size()`。
+1. `candidate[0, matched)` 已完成配對。
+2. 這些配對位置保持嚴格遞增。
+3. `matched` 不會超過 `candidate.size()`。
 
-#### Initialization
+### 邊界案例
 
-開始時 `matched == 0`。空字串是任何字串的 Subsequence，因此 `candidate[0, 0)` 已成功配對，Invariant 成立。
+- `candidate` 為空：回傳 `true`，因為空字串是任何字串的 Subsequence。
+- `text` 為空而 `candidate` 非空：回傳 `false`。
+- `candidate.size() > text.size()`：一定是 `false`，現有流程已能自然處理。
+- 重複字元仍按順序配對，例如 `"aa"` 是 `"aba"` 的 Subsequence。
 
-#### Maintenance
+### 複雜度
 
-讀取目前 `text` Byte：
+- 時間：O(text.size())。
+- 額外空間：O(1)。
 
-- 若它等於下一個待配對 Byte，增加 `matched`。
-- 若不同，略過目前 Byte，不改變已配對結果。
+---
 
-因為 Subsequence 允許跳過元素，而配對時只向前移動，順序不會被破壞。
+## 6.7 從最簡單的回文開始
 
-#### Termination
+### 什麼是回文
 
-完整走訪 `text` 後：
+回文表示從左向右與從右向左讀取相同。
 
-- 若 `matched == candidate.size()`，全部 Candidate Bytes 都已依序配對，回傳 `true`。
-- 否則仍有 Candidate Byte 未找到，回傳 `false`。
+```text
+level
+abba
+racecar
+```
 
-#### 為什麼貪心配對最早位置可行
+### 最直接的想法
 
-當下一個 Candidate Byte 可在目前位置配對時，選擇最早可用位置，不會減少後方可使用的空間。若改選更晚的相同 Byte，只會留下更短的後綴。因此，立即配對目前最早位置是安全的。
+可以先反轉字串，再比較是否相同。但這需要建立反轉後的結果。
 
-#### 邊界案例
+另一種方式是同時比較左右兩端：
 
-<table>
-<tr><th>candidate</th><th>text</th><th>答案</th><th>目的</th></tr>
-<tr><td>空字串</td><td>任何字串</td><td>true</td><td>空序列是任何序列的 Subsequence</td></tr>
-<tr><td>"a"</td><td>空字串</td><td>false</td><td>沒有可配對位置</td></tr>
-<tr><td>"abc"</td><td>"abc"</td><td>true</td><td>完全相同</td></tr>
-<tr><td>"ace"</td><td>"abcde"</td><td>true</td><td>跳過中間 Byte</td></tr>
-<tr><td>"aec"</td><td>"abcde"</td><td>false</td><td>順序不符</td></tr>
-<tr><td>"aaa"</td><td>"aa"</td><td>false</td><td>重複次數不足</td></tr>
-</table>
+```text
+l e v e l
+↑       ↑
+left  right
+```
 
-#### 複雜度
+若兩端相同，就向中間移動。
 
-- 時間複雜度：O(text.size())。
-- 額外空間複雜度：O(1)。
+### 為什麼 `right` 不直接設成 `size() - 1`
 
-使用 `string_view` 只是避免複製參數，不會改變核心演算法。
+如果字串為空：
 
-### 6.6 第四步：使用 Two Pointers 判斷回文
+```cpp
+text.size() == 0
+```
 
-回文表示由左向右與由右向左讀取相同。
+而 `std::size_t` 是 Unsigned Type，計算 `0 - 1` 會產生 Underflow。
 
-最直接的方法是將字串反轉後比較，但這需要建立副本。Two Pointers 可以從左右兩端向中間移動：
+因此本章讓 `right` 先表示 Exclusive End：
+
+```cpp
+std::size_t right = text.size();
+```
+
+真正比較右側元素前，再使用 `--right`。
+
+### C++ 解法
 
 ```cpp
 #include <string_view>
@@ -435,42 +727,56 @@ bool isPalindrome(std::string_view text)
 }
 ```
 
-這裡將 `right` 設為 Exclusive End，避免空字串時直接計算 `size() - 1` 造成 Unsigned Underflow。
+### 逐步理解 `"abba"`
 
-#### Invariant
+```text
+初始：[0, 4)
+比較 text[0] 與 text[3]：a == a
 
-每輪開始前：
+剩下：[1, 3)
+比較 text[1] 與 text[2]：b == b
 
-> 區間 `[0, left)` 與 `[right, size)` 已完成鏡像配對，而且每一組都相同。
+剩下：[2, 2)
+沒有尚未比較的內容，成功
+```
 
-本輪先將 `right` 移到下一個尚未比較的位置，再比較 `text[left]` 與 `text[right]`。
+### 本版本的規格
 
-#### 終止條件
-
-當左右未比較區間長度小於 2 時，不再需要比較。奇數長度字串中央 Byte 不影響回文結果。
-
-#### 本版本的語意
-
-本版本：
+這個版本：
 
 - 逐 Byte 比較。
 - 區分大小寫。
-- 不忽略空白或標點。
+- 不忽略空白。
+- 不忽略標點。
 
-因此它適合 ASCII 或 Byte 序列回文。若需求是 Unicode 可見字形回文，需要先使用適當方式切分文字單位。
+因此 `"Aba"` 不是回文，`"a a"` 則是回文。
 
-### 6.7 完整案例：忽略非英數字元的回文
+### Loop Invariant
 
-#### 問題規格
+每輪開始前：
 
-判斷 ASCII 字串在忽略非英數字元，且英文字母不區分大小寫後，是否為回文。
+- `[0, left)` 與 `[right, size())` 已完成鏡像配對。
+- 已比較的每一組內容都相同。
+- `[left, right)` 是尚未完成比較的範圍。
 
-#### Precondition
+### 複雜度
 
-- 輸入按 ASCII 規則分類。
-- 非 ASCII Byte 不視為本案例定義中的英數字元。
+- 時間：O(n)。
+- 額外空間：O(1)。
 
-#### 輔助函式
+---
+
+## 6.8 完整案例：忽略標點與大小寫的回文
+
+### 問題規格
+
+判斷 ASCII 字串在以下規則下是否為回文：
+
+- 忽略非英數字元。
+- 英文字母不區分大小寫。
+- 數字保留並參與比較。
+
+### 第一步：定義 ASCII 分類
 
 ```cpp
 bool isAsciiAlphaNumeric(char ch)
@@ -478,20 +784,28 @@ bool isAsciiAlphaNumeric(char ch)
     const bool digit = ch >= '0' && ch <= '9';
     const bool lower = ch >= 'a' && ch <= 'z';
     const bool upper = ch >= 'A' && ch <= 'Z';
+
     return digit || lower || upper;
 }
+```
 
+### 第二步：定義 ASCII 小寫轉換
+
+```cpp
 char lowerAscii(char ch)
 {
     if (ch >= 'A' && ch <= 'Z')
     {
         return static_cast<char>(ch - 'A' + 'a');
     }
+
     return ch;
 }
 ```
 
-#### C++ 解法
+這裡刻意只處理 ASCII，避免讓函式名稱暗示它能完成所有 Unicode 大小寫轉換。
+
+### 第三步：左右略過不需比較的內容
 
 ```cpp
 #include <string_view>
@@ -534,84 +848,111 @@ bool isNormalizedPalindrome(std::string_view text)
 }
 ```
 
-#### 區間模型
+### 迴圈分成哪幾件事
 
-尚未處理範圍是：
+每一輪依序處理：
 
-```text
-[left, right)
-```
+1. 左指標略過非英數內容。
+2. 右指標略過非英數內容。
+3. 確認是否還有需要比較的範圍。
+4. 將左右字元轉成相同大小寫後比較。
+5. 兩端都向中間移動。
 
-左側檢查 `text[left]`，右側檢查 `text[right - 1]`。使用 Exclusive End 可以安全表示空字串。
+將流程拆開後，程式會比一次閱讀整個 `while` 容易理解。
 
-#### Loop Invariant
+### 為什麼不一定要先建立整理後的字串
 
-每輪主要比較開始前：
+本解法在指標移動時直接套用比較規則，所以不需要建立完整副本，額外空間為 O(1)。
 
-1. `[0, left)` 與 `[right, size)` 中所有需要比較的英數字元，已完成鏡像配對。
-2. 已配對內容在忽略大小寫後相同。
-3. `[left, right)` 是尚未處理範圍。
-
-略過非英數 Byte 不會改變依比較規則所得到的字元序列，因此 Invariant 仍成立。
-
-#### 為什麼不先建立整理後的字串
-
-本案例在 Two Pointers 移動時直接略過非英數 Byte，並在比較當下轉成小寫，因此不需要建立完整副本，額外空間為 O(1)。
-
-另一種作法是先建立只包含小寫英數字元的新字串，再用一般回文方法比較。這種寫法通常較容易拆解與測試，但需要 O(n) 額外空間。
-
-選擇時可考慮：
-
-- 整理後的結果是否會重複使用。
-- 是否允許 O(n) 額外空間。
-- 將整理流程與比較流程分開後，是否更容易閱讀與測試。
-- 輸入是否確實限定為 ASCII；若不是，分類與大小寫轉換規則需要另行定義。
-
-#### 邊界案例
-
-<table>
-<tr><th>輸入</th><th>答案</th><th>目的</th></tr>
-<tr><td>空字串</td><td>true</td><td>Normalize 後仍為空</td></tr>
-<tr><td>"a"</td><td>true</td><td>單一英文字母</td></tr>
-<tr><td>".,,"</td><td>true</td><td>Normalize 後為空</td></tr>
-<tr><td>"A1a"</td><td>true</td><td>大小寫與數字</td></tr>
-<tr><td>"ab"</td><td>false</td><td>第一組比較即失敗</td></tr>
-<tr><td>"A man, a plan, a canal: Panama"</td><td>true</td><td>空白、標點與大小寫</td></tr>
-</table>
-
-#### 不應直接套用到任意 Unicode 文字
-
-此案例的分類與小寫轉換只定義 ASCII。若產品需求涉及完整 Unicode 大小寫折疊、正規化或 Grapheme Cluster，比較規則會更複雜，應使用適合的 Unicode 函式庫並明確指定 Normalization Form。
-
-### 6.8 第五步：進行頻率統計
-
-頻率統計的核心問題是：
-
-> 每個可能鍵值的範圍是否小而固定？
-
-#### 只含小寫英文字母
-
-若 Precondition 保證每個 Byte 都在 `'a'` 到 `'z'`：
+另一種寫法是先建立新字串：
 
 ```cpp
-#include <array>
+#include <string>
 #include <string_view>
 
-std::array<int, 26> countLowercase(
+std::string keepLowercaseAsciiAlphaNumeric(
     std::string_view text)
 {
-    std::array<int, 26> frequency{};
+    std::string cleaned;
+    cleaned.reserve(text.size());
 
     for (char ch : text)
     {
-        ++frequency[static_cast<std::size_t>(ch - 'a')];
+        if (isAsciiAlphaNumeric(ch))
+        {
+            cleaned.push_back(lowerAscii(ch));
+        }
     }
 
-    return frequency;
+    return cleaned;
 }
 ```
 
-映射關係是：
+接著再對 `cleaned` 呼叫一般回文函式。
+
+兩種方法比較：
+
+- 先建立新字串：流程較容易拆解與測試，需要 O(n) 額外空間。
+- 比較時直接略過：不建立完整副本，需要更仔細處理左右邊界。
+
+如果整理後結果還會用於其他工作，建立新字串可能更合理。如果只比較一次，而且空間限制嚴格，直接使用 Two Pointers 較合適。
+
+### `<cctype>` 的安全呼叫方式
+
+也可以使用 `std::isalnum`、`std::tolower` 等函式，但傳入值必須等於 `EOF`，或可表示為 `unsigned char`。直接傳入負值 `char` 可能造成 Undefined Behavior。
+
+安全包裝方式：
+
+```cpp
+#include <cctype>
+
+bool isAlphaNumeric(char ch)
+{
+    const auto value = static_cast<unsigned char>(ch);
+    return std::isalnum(value) != 0;
+}
+
+char toLower(char ch)
+{
+    const auto value = static_cast<unsigned char>(ch);
+    return static_cast<char>(std::tolower(value));
+}
+```
+
+這些函式也可能受到目前 Locale 影響。若題目明確限定 ASCII，直接寫出 ASCII 範圍通常更容易看出規格。
+
+### 邊界案例
+
+- 空字串：`true`。
+- 單一英數字元：`true`。
+- 只含標點：`true`，因為整理後為空字串。
+- `"A1a"`：`true`。
+- `"ab"`：`false`。
+- `"A man, a plan, a canal: Panama"`：`true`。
+
+### Unicode 限制
+
+本案例只定義 ASCII 分類與大小寫轉換。若需求包含完整 Unicode Case Folding、Normalization Form 或 Grapheme Cluster，應使用適合的 Unicode 函式庫，不能直接將這組函式視為完整 Unicode 解法。
+
+---
+
+## 6.9 字元頻率與 Anagram
+
+### 核心問題
+
+頻率統計是在回答：
+
+```text
+每個可能值出現幾次？
+```
+
+在選資料結構以前，先問：
+
+> 可能的鍵值範圍是否小而固定？
+
+### 只含小寫英文字母
+
+如果題目保證每個字元都在 `'a'` 到 `'z'`，可以使用 26 格 Array。
 
 ```text
 'a' -> 0
@@ -620,49 +961,79 @@ std::array<int, 26> countLowercase(
 'z' -> 25
 ```
 
-#### Precondition 不成立的風險
+```cpp
+#include <array>
+#include <string_view>
 
-若 `ch` 是 `'A'`、數字或其他 Byte：
+std::array<std::size_t, 26> countLowercase(
+    std::string_view text)
+{
+    std::array<std::size_t, 26> frequency{};
+
+    for (char ch : text)
+    {
+        const auto index =
+            static_cast<std::size_t>(ch - 'a');
+        ++frequency[index];
+    }
+
+    return frequency;
+}
+```
+
+### 為什麼 Precondition 很重要
+
+若 `ch` 不是小寫英文字母：
 
 ```cpp
 ch - 'a'
 ```
 
-可能不在 `[0, 26)`，進而造成越界。因此，固定 Frequency Array 的正確性依賴明確字元範圍。
+可能不在 `[0, 26)`，接著存取 Array 就可能越界。
 
-#### 範圍不固定時使用 Map
+固定大小 Array 的速度與簡潔，建立在「值域假設成立」之上。
 
-若需統計任意 Byte：
+### 任意 Byte
+
+若需要統計任意 Byte，可以使用 256 格 Array：
 
 ```cpp
 #include <array>
+#include <string_view>
 
-std::array<std::size_t, 256> frequency{};
-for (unsigned char byte : text)
+std::array<std::size_t, 256> countBytes(
+    std::string_view text)
 {
-    ++frequency[byte];
+    std::array<std::size_t, 256> frequency{};
+
+    for (unsigned char byte : text)
+    {
+        ++frequency[byte];
+    }
+
+    return frequency;
 }
 ```
 
-若要統計解碼後的 Unicode Code Point，則可使用以 Code Point 為 Key 的 Map，但前提是先正確解碼 UTF-8。
+### 何時使用 Hash Map
 
-#### Array 與 Hash Map 的選擇
+適合使用固定 Array：
 
-<table>
-<tr><th>已知條件</th><th>適合結構</th><th>原因</th></tr>
-<tr><td>只含 26 個小寫英文字母</td><td>固定 Array</td><td>範圍小、映射直接</td></tr>
-<tr><td>任意 Byte</td><td>大小 256 的 Array</td><td>Byte 值域固定</td></tr>
-<tr><td>稀疏且範圍大的鍵值</td><td>Hash Map</td><td>不需配置完整值域</td></tr>
-<tr><td>需要依鍵排序輸出</td><td>Ordered Map 或排序後輸出</td><td>Hash Map 不保證排序順序</td></tr>
-</table>
+- 值域小。
+- 值域固定。
+- 可以直接將值映射成 Index。
 
-#### 計數型別
+適合使用 Hash Map：
 
-若字串長度可能大於 `int` 可表示範圍，頻率可使用 `std::size_t`。選擇型別時應以最大輸入長度為基礎，而不是固定使用 `int`。
+- Key 範圍很大。
+- 實際出現的 Key 很少。
+- Key 不是容易映射成小範圍 Index 的型別。
 
-#### 完整案例：檢查 Anagram
+若需要統計解碼後的 Unicode Code Points，應先正確解碼 UTF-8，再依需求選擇 Map 或其他結構。
 
-若兩個 ASCII 小寫字串互為 Anagram，它們的每個字母出現次數相同：
+### 完整案例：Anagram
+
+若兩個小寫 ASCII 字串互為 Anagram，每個字母在兩者中的出現次數必須相同。
 
 ```cpp
 #include <array>
@@ -702,19 +1073,49 @@ bool areAnagrams(
 }
 ```
 
-Precondition 是兩個輸入都只包含 `'a'` 到 `'z'`。Postcondition 是：回傳 `true`，若且唯若每個小寫字母在兩個輸入中的頻率相同。
+### 為什麼一加一減
 
-### 6.9 第六步：理解 Substring 的複製成本
+- `first` 出現某字母時，差值加一。
+- `second` 出現同一字母時，差值減一。
+- 最後全部回到零，代表每個字母數量相同。
 
-`std::string::substr` 通常建立一個新的 `std::string`，並複製指定內容：
+### Precondition
+
+兩個輸入都只包含 `'a'` 到 `'z'`。
+
+若規格允許大寫、空白或 Unicode，必須先重新定義比較規則與鍵值範圍。
+
+### 複雜度
+
+- 時間：O(n)。
+- 額外空間：O(1)，因為 Array 大小固定為 26。
+
+---
+
+## 6.10 `substr`：切出內容與複製成本
+
+### `std::string::substr` 做什麼
 
 ```cpp
 std::string part = text.substr(position, count);
 ```
 
-若複製長度為 `k`，時間與額外空間通常至少和 `k` 成正比。
+它從已知位置開始，建立一個新的 `std::string`。
 
-#### 遞迴中反覆建立 Substring
+若複製長度為 `k`，時間與額外空間通常至少與 `k` 成正比。
+
+### 單次使用通常不是問題
+
+```cpp
+std::string filename = "report.txt";
+std::string extension = filename.substr(7, 3);
+```
+
+若只建立一次短字串，這通常很自然。
+
+問題多半發生在迴圈或遞迴中反覆建立越來越大的副本。
+
+### 遞迴中反覆複製
 
 ```cpp
 bool solve(std::string text)
@@ -728,15 +1129,15 @@ bool solve(std::string text)
 }
 ```
 
-假設長度為 `n`，每層分別複製約 `n - 1`、`n - 2`、直到 1 個 Byte。總複製量可能形成：
+長度為 `n` 時，各層可能分別複製約：
 
 ```text
-(n - 1) + (n - 2) + ... + 1 = O(n²)
+n - 1, n - 2, ..., 1
 ```
 
-另外，函式參數按值接收也會產生複製。
+總複製量可能形成 O(n²)。函式參數按值接收，也會產生額外複製。
 
-#### 改傳 Index
+### 改傳原字串與 Index
 
 ```cpp
 bool solve(
@@ -752,21 +1153,28 @@ bool solve(
 }
 ```
 
-原字串由 `const` Reference 共用，每層只傳遞 Index。
+這裡所有遞迴層共用同一個原字串，只傳遞位置。
 
-#### 改傳 Half-open Interval
+### 改傳區間
 
-若遞迴處理一段範圍，可傳：
+如果子問題是一段連續範圍，可以傳：
 
 ```text
 [left, right)
 ```
 
-這樣能避免每層建立新字串，也能清楚表示空範圍。
+這能表示：
 
-#### 使用 `string_view`
+- 子問題的起點。
+- 子問題的終點。
+- 空範圍。
+- 子問題長度 `right - left`。
+
+### 改用 `string_view`
 
 ```cpp
+#include <string_view>
+
 bool solve(std::string_view text)
 {
     if (text.empty())
@@ -778,45 +1186,29 @@ bool solve(std::string_view text)
 }
 ```
 
-`string_view::substr` 建立新 View，不複製底層字元。但 View 不擁有資料，原始字串必須在所有遞迴呼叫期間保持有效。
+`string_view::substr` 只建立新的 View，不複製底層字元。但它帶來生命週期要求，6.11 會完整說明。
 
-#### 6.9.1 從共同子串問題理解 `substr` 的角色
+### 先記住
 
-本節不是要完整介紹所有共同子串演算法，而是透過常見問題區分「尋找區間」與「取得區間內容」兩件事。暴力法與 DP 用來決定答案的位置和長度，`substr` 則在區間已知後建立結果字串。相關演算法會在後續的 Dynamic Programming 與 String Matching 章節進一步展開。
+- `std::string::substr` 會建立擁有資料的新字串。
+- 少量使用很自然。
+- 反覆使用前要估算總複製量。
+- Index、區間與 `string_view` 都能表示子問題，但適用條件不同。
 
-看到 `substr` 時，可以先把問題拆成三層：
+### 6.10.1 從共同子串問題理解 `substr` 的角色
 
-1. 定義層：題目要的是連續的 Substring，還是可跳過元素的 Subsequence。
-2. 工具層：`std::string::substr` 只負責從已知位置切出一段連續內容。
-3. 搜尋層：若還不知道答案在哪裡，需要另外用 `find`、雙迴圈、Sliding Window、DP 或其他字串搜尋方法。
+> 延伸閱讀：若尚未學過 Dynamic Programming，可以先讀到暴力解法。DP 部分可稍後再回來。
 
-`substr` 的角色比較像「切片工具」，不是「搜尋工具」。例如：
+本節透過共同子串問題區分兩件事：
 
-```cpp
-std::string text = "abcde";
-std::string part = text.substr(1, 3); // "bcd"
-```
+1. 尋找答案的位置與長度。
+2. 已知位置與長度後，切出答案內容。
 
-這裡的第二個參數是 Count，也就是要取幾個 Bytes。若用 Half-open Interval 表示同一段範圍，`"bcd"` 是 `[1, 4)`，因此應寫成：
+`substr` 只負責第二件事。
 
-```cpp
-std::string part = text.substr(1, 4 - 1);
-```
+#### 固定 Pattern 搜尋
 
-若寫成 `text.substr(1, 4)`，意思會變成「從 Index 1 開始取 4 個 Bytes」，結果是 `"bcde"`。
-
-##### 找共同子串不是改寫 substr
-
-若題目給兩個字串，要求找出共同的連續片段，真正要處理的是「搜尋兩個字串中相同的連續區間」。最後可以用 `substr` 把答案切出來，但答案的位置與長度要先由演算法決定。
-
-例如：
-
-```cpp
-std::string s1 = "abcabc";
-std::string s2 = "abcabcabcabc";
-```
-
-若只是判斷固定 Pattern `"abc"` 是否同時出現在兩個字串中，可以使用 `find`：
+如果已知要找的 Pattern：
 
 ```cpp
 #include <iostream>
@@ -824,19 +1216,29 @@ std::string s2 = "abcabcabcabc";
 
 int main()
 {
-    std::string s1 = "abcabc";
-    std::string s2 = "abcabcabcabc";
+    std::string first = "abcabc";
+    std::string second = "abcabcabcabc";
     std::string pattern = "abc";
 
-    if (s1.find(pattern) != std::string::npos &&
-        s2.find(pattern) != std::string::npos)
+    if (first.find(pattern) != std::string::npos &&
+        second.find(pattern) != std::string::npos)
     {
-        std::cout << pattern << " is a common substring\n";
+        std::cout << pattern
+                  << " is a common substring\n";
     }
 }
 ```
 
-若要自動找出最長共同 Substring，可以先用雙迴圈建立概念：
+這裡使用 `find` 搜尋固定 Pattern，不需要改寫 `substr`。
+
+#### 最長共同子串的暴力想法
+
+若 Pattern 未知，題目要求自動找出兩個字串的最長連續共同片段，可以：
+
+1. 枚舉 `first` 的起點。
+2. 枚舉 `second` 的起點。
+3. 從兩個起點同步向右比較。
+4. 記錄目前最長的連續配對長度。
 
 ```cpp
 #include <string>
@@ -853,6 +1255,7 @@ std::string longestCommonSubstring(
         for (std::size_t j = 0; j < second.size(); ++j)
         {
             std::size_t length = 0;
+
             while (i + length < first.size() &&
                    j + length < second.size() &&
                    first[i + length] == second[j + length])
@@ -862,8 +1265,6 @@ std::string longestCommonSubstring(
 
             if (length > bestLength)
             {
-                // bestBegin 記錄 first 中該段連續區間的起始位置。
-                // 因為本次配對都以目前的 i 為基準。
                 bestBegin = i;
                 bestLength = length;
             }
@@ -874,23 +1275,38 @@ std::string longestCommonSubstring(
 }
 ```
 
-這段流程中，雙迴圈負責選擇兩個起點，`while` 負責同步往右比對。一旦遇到不同 Byte，本次連續片段就結束。`substr` 只在最後使用，用來切出已經找到的區間。
+這段程式中：
 
-##### 最長共同子串的 DP 狀態
+- 雙迴圈選擇兩個起點。
+- `while` 找出從起點開始的共同長度。
+- `bestBegin` 與 `bestLength` 記錄答案區間。
+- 最後才由 `substr` 切出答案。
 
-若輸入較長，暴力比對最壞情況可能需要 `O(n * m * min(n, m))` 時間。DP 可將時間降為 `O(n * m)`。
+#### 為什麼這不是 Subsequence
+
+只要中間出現不同字元，目前的共同長度就停止，因為 Substring 必須連續。
+
+若題目是最長共同 Subsequence，則允許跳過元素，問題模型與狀態轉移都不同。
+
+#### 延伸：Dynamic Programming
 
 定義：
 
 ```text
-dp[i][j] = first[0, i) 與 second[0, j) 中，
-           以 first[i - 1] 和 second[j - 1] 結尾的最長共同後綴長度
+dp[i][j] = 以 first[i - 1] 與 second[j - 1] 結尾的
+           最長共同連續後綴長度
 ```
 
-轉移規則：
+轉移：
 
-- 若 `first[i - 1] == second[j - 1]`，則 `dp[i][j] = dp[i - 1][j - 1] + 1`。
-- 若不同，則 `dp[i][j] = 0`。因為 Substring 必須連續，中間斷開後不能沿用前面的長度。
+```text
+若 first[i - 1] == second[j - 1]
+    dp[i][j] = dp[i - 1][j - 1] + 1
+否則
+    dp[i][j] = 0
+```
+
+遇到不同字元時歸零，是因為 Substring 必須連續。
 
 ```cpp
 #include <string>
@@ -917,6 +1333,7 @@ std::string longestCommonSubstringDp(
             if (first[i - 1] == second[j - 1])
             {
                 dp[i][j] = dp[i - 1][j - 1] + 1;
+
                 if (dp[i][j] > bestLength)
                 {
                     bestLength = dp[i][j];
@@ -926,32 +1343,61 @@ std::string longestCommonSubstringDp(
         }
     }
 
-    return first.substr(bestEnd - bestLength, bestLength);
+    return first.substr(
+        bestEnd - bestLength,
+        bestLength);
 }
 ```
 
-這個 DP 狀態只從左上角轉移。左上角代表兩邊前一個位置也必須配對成功，因此它自然保留了 Substring 的連續性。
+DP 決定 `bestEnd` 與 `bestLength`，`substr` 仍只負責把已知答案區間建立成新字串。
 
-<table>
-<tr><th>題目用語</th><th>通常代表</th><th>常見方法</th></tr>
-<tr><td>連續片段、Substring、子字串</td><td>`[left, right)` 連續區間</td><td>Sliding Window、雙迴圈、DP</td></tr>
-<tr><td>保持順序、可刪除部分字元、Subsequence</td><td>可跳過元素，但順序不能改</td><td>Two Pointers、DP</td></tr>
-<tr><td>某個 Pattern 是否出現</td><td>固定字串搜尋</td><td>`find`、KMP、Rolling Hash</td></tr>
-<tr><td>最長共同子串</td><td>兩字串中的最長連續共同片段</td><td>DP、Suffix Array、Suffix Automaton</td></tr>
-</table>
+#### 本節真正要帶走的觀念
 
-### 6.10 第七步：管理 string_view 的生命週期
+- 已知 Pattern：可先考慮 `find`。
+- 未知共同區間：需要搜尋方法。
+- `substr` 不會替你決定答案在哪裡。
+- Substring 與 Subsequence 的連續性不同，不能共用同一套轉移規則。
 
-`std::string_view` 保存的是：
+---
+
+## 6.11 `string_view`：只看資料，不擁有資料
+
+### 為什麼需要 `string_view`
+
+有時函式只想讀取字串，不需要：
+
+- 修改內容。
+- 保存獨立副本。
+- 接管資料生命週期。
+
+此時可以接收 `std::string_view`。
+
+### 最重要的直覺
+
+> `string_view` 自己沒有保存字元內容。它只記住「從哪裡開始」與「看多長」。
+
+可以想成：
+
+```text
+原始資料： [ a b c d e ]
+              ↑─────↑
+View：       起點 + 長度
+```
+
+### 它通常保存什麼
+
+概念上包含：
 
 - 指向某段字元資料的位置。
 - 該範圍的長度。
 
-它不擁有資料，也不負責延長原字串生命週期。
+它不負責延長原始資料的生命週期。
 
-#### 安全案例
+### 安全案例
 
 ```cpp
+#include <string_view>
+
 std::string_view middle(std::string_view text)
 {
     if (text.size() < 2)
@@ -963,9 +1409,9 @@ std::string_view middle(std::string_view text)
 }
 ```
 
-函式回傳的 View 仍指向呼叫端提供的資料。它是否安全，取決於呼叫端原始資料是否繼續存在且未被不相容地修改。
+回傳 View 是否安全，取決於呼叫端提供的原始資料是否仍然存在。
 
-#### 懸空 View
+### 懸空 View
 
 ```cpp
 std::string_view makeView()
@@ -975,9 +1421,9 @@ std::string_view makeView()
 }
 ```
 
-函式結束時 `local` 被銷毀，回傳的 View 指向已失效資料。
+函式結束時，`local` 被銷毀。回傳的 View 仍記得舊位置，但該位置已不再代表有效字串資料。
 
-類似風險也可能發生於暫時物件：
+暫時物件也有相同風險：
 
 ```cpp
 std::string_view view = std::string("temporary");
@@ -985,7 +1431,7 @@ std::string_view view = std::string("temporary");
 
 完整運算式結束後，暫時字串被銷毀，`view` 失效。
 
-#### 原字串修改也可能使 View 失效
+### 原字串修改也可能讓 View 失效
 
 ```cpp
 std::string text = "abc";
@@ -994,41 +1440,55 @@ std::string_view view = text;
 text.push_back('d');
 ```
 
-若 `push_back` 造成 Reallocation，View 原本指向的位置便失效。即使沒有 Reallocation，刪除或重排內容也可能讓 View 的語意不再符合原本預期。
+如果 `push_back` 引發 Reallocation，原本的儲存位置會改變，View 便可能失效。
 
-#### View 不保證 Null-terminated
+即使沒有 Reallocation，刪除或重排內容也可能讓 View 所代表的語意不再符合原本預期。
 
-`string_view` 可指向原字串中間：
+### View 不保證以 Null Terminator 結尾
 
 ```cpp
 std::string_view part(text.data() + 2, 3);
 ```
 
-`part.data()` 後方不一定在 View 結尾處有 `\0`。因此不能只把 `part.data()` 傳給預期 C String 的函式。若對方需要 Null-terminated 字串，應建立擁有資料的 `std::string`：
+`part.data()` 指向原字串中間，View 結尾處不一定有 `\0`。
+
+因此不能直接將 `part.data()` 當成完整 C String 使用。若 C 介面需要 Null-terminated String，可以建立擁有資料的字串：
 
 ```cpp
 std::string owned(part);
 useCFunction(owned.c_str());
 ```
 
-#### 是否適合使用 `string_view`
+### 何時適合使用
 
 適合：
 
-- 函式只在呼叫期間讀取字串。
-- 切分大量子區間但不需保存副本。
+- 函式只在呼叫期間讀取資料。
+- 需要切分大量範圍，但不想建立副本。
 - 原始資料生命週期清楚且足夠長。
 
 不適合直接保存：
 
 - 原始資料可能很快被銷毀。
-- 原字串會修改或重新配置。
-- 需要獨立 Ownership。
-- 需要傳給依賴 Null Terminator 的介面。
+- 原字串會被修改或重新配置。
+- 結果需要獨立 Ownership。
+- 需要穩定的 Null-terminated C String。
 
-### 6.11 第八步：有效率地建構字串
+### `std::string` 與 `string_view` 的選擇
 
-#### 尾端追加
+問自己：
+
+> 這個結果需要擁有自己的資料嗎？
+
+- 需要：使用 `std::string`。
+- 不需要，而且原資料一定活得夠久：可以考慮 `string_view`。
+- 無法確定生命週期：優先選擇擁有資料的型別。
+
+---
+
+## 6.12 有效率地建構字串
+
+### 尾端追加
 
 ```cpp
 std::string result;
@@ -1036,9 +1496,9 @@ result.push_back('a');
 result += "bc";
 ```
 
-和 `std::vector` 相似，字串尾端追加在容量足夠時通常不需搬移全部內容；容量不足時可能重新配置。
+字串容量足夠時，尾端追加通常不需要搬移全部既有內容。
 
-#### 已知長度時先 `reserve`
+### 已知大致長度時使用 `reserve`
 
 ```cpp
 std::string result;
@@ -1053,39 +1513,17 @@ for (char ch : input)
 }
 ```
 
-`reserve` 不會改變 `size()`，也不會建立可用字元。它只是降低成長過程中反覆配置的可能性。
+`reserve` 只調整 Capacity，不會改變 `size()`，也不會建立可以用 Index 存取的新元素。
 
-#### 反覆在前端插入
-
-```cpp
-result.insert(result.begin(), ch);
-```
-
-每次前端插入都可能搬移現有全部內容。若執行 `n` 次，總搬移量可能形成 O(n²)。
-
-如果目標是反向結果，可考慮：
-
-- 先尾端追加，再 `std::reverse`。
-- 從原輸入後方向前走訪並尾端追加。
-- 預先建立固定大小結果，再按 Index 填入。
-
-#### 反覆使用 `result = result + piece`
-
-此寫法可能建立新的暫時字串並複製舊內容：
+錯誤觀念：
 
 ```cpp
-result = result + piece;
+std::string result;
+result.reserve(10);
+result[0] = 'a';  // 錯誤，size() 仍是 0
 ```
 
-若只是追加，通常較適合：
-
-```cpp
-result += piece;
-```
-
-仍需根據實際流程與編譯器最佳化判斷，但語意上 `+=` 更直接表達在原結果尾端加入內容。
-
-#### 預先建立大小
+### 預先建立實際大小
 
 若最終長度可以準確計算：
 
@@ -1098,24 +1536,70 @@ for (std::size_t i = 0; i < length; ++i)
 }
 ```
 
-這裡使用的是建立 `length` 個元素，不是只保留 Capacity。因此可以合法按 Index 寫入 `[0, length)`。
+這時 `size()` 已是 `length`，可以合法寫入 `[0, length)`。
 
-### 6.12 第九步：建立清楚的解析規格
+### 避免反覆從前端插入
 
-字串解析不能只寫「用逗號切開」。還要定義：
+```cpp
+result.insert(result.begin(), ch);
+```
 
-- 連續 Delimiter 是否產生空 Token。
-- 開頭 Delimiter 是否產生第一個空 Token。
-- 結尾 Delimiter 是否產生最後一個空 Token。
-- Token 前後空白是否保留。
-- 空輸入是零個 Token，還是一個空 Token。
-- 是否允許 Escape 或引號。
-- 數字前是否允許正負號。
-- 遇到非法內容時回傳什麼。
+前端插入可能搬移全部既有內容。重複 `n` 次，總搬移量可能形成 O(n²)。
 
-#### 簡單切分案例
+若要建立反向結果，可以：
 
-以下函式保留空 Token，並將結果存成 `string_view`：
+- 從原輸入尾端向前走訪，再 `push_back`。
+- 先尾端加入，再呼叫 `std::reverse`。
+- 預先建立完整大小，再依 Index 寫入。
+
+### `result = result + piece`
+
+```cpp
+result = result + piece;
+```
+
+這種寫法可能建立暫時字串並複製舊內容。若語意只是追加，通常使用：
+
+```cpp
+result += piece;
+```
+
+更直接。
+
+### 先記住
+
+- `reserve` 改變 Capacity，不改變 Size。
+- `resize` 或建構指定長度才會建立元素。
+- 尾端追加通常比反覆前端插入更合適。
+- 先估算最終長度，可以減少重新配置。
+
+---
+
+## 6.13 字串解析與 Split
+
+### 「用逗號切開」還不算完整規格
+
+開始實作以前，至少要回答：
+
+- 連續 Delimiter 是否產生空 Token？
+- 開頭 Delimiter 是否產生第一個空 Token？
+- 結尾 Delimiter 是否產生最後一個空 Token？
+- Token 前後空白是否保留？
+- 空輸入代表零個 Token，還是一個空 Token？
+- 是否允許引號或 Escape？
+- 遇到非法內容時如何回報？
+
+### 本案例的規格
+
+以下 Split：
+
+- 保留空 Token。
+- 空輸入得到一個空 Token。
+- 結尾 Delimiter 產生最後一個空 Token。
+- 不移除 Token 前後空白。
+- 不處理引號與 Escape。
+
+### C++ 解法
 
 ```cpp
 #include <string_view>
@@ -1130,7 +1614,8 @@ std::vector<std::string_view> split(
 
     while (true)
     {
-        const std::size_t end = text.find(delimiter, begin);
+        const std::size_t end =
+            text.find(delimiter, begin);
 
         if (end == std::string_view::npos)
         {
@@ -1138,7 +1623,8 @@ std::vector<std::string_view> split(
             break;
         }
 
-        result.push_back(text.substr(begin, end - begin));
+        result.push_back(
+            text.substr(begin, end - begin));
         begin = end + 1;
     }
 
@@ -1146,48 +1632,76 @@ std::vector<std::string_view> split(
 }
 ```
 
-此規格下：
+### 逐步理解
+
+對：
 
 ```text
-"a,,b," -> ["a", "", "b", ""]
-""       -> [""]
+a,,b,
 ```
 
-若希望空輸入得到零個 Token，或忽略空 Token，需要另外修改 Postcondition 與分支。
+結果為：
 
-#### View 的生命週期再次出現
+```text
+["a", "", "b", ""]
+```
 
-回傳的 `vector<string_view>` 全部指向輸入資料。因此：
+流程：
+
+1. 第一個逗號前是 `"a"`。
+2. 兩個逗號中間是空範圍，因此得到 `""`。
+3. 下一段是 `"b"`。
+4. 最後一個逗號後仍有一個空範圍，因此得到 `""`。
+
+### 為什麼最後還要 `push_back`
+
+Token 不只在遇到 Delimiter 時形成。最後一段內容位於最後一個 Delimiter 之後，或整個字串根本沒有 Delimiter。
+
+因此，`find` 回傳 `npos` 時仍要將尾端範圍加入結果。
+
+### `vector<string_view>` 的生命週期
+
+所有 Token 都指向原輸入資料：
 
 ```cpp
 std::string input = "a,b,c";
 auto parts = split(input, ',');
 ```
 
-只要使用 `parts`，`input` 就必須仍然存在，而且不能發生使底層位置失效的修改。若 Token 需要獨立保存，應回傳 `vector<string>`。
+使用 `parts` 期間，`input` 必須仍然存在，而且不能發生使底層位置失效的修改。
 
-#### 數字解析的規格
+若 Token 需要獨立保存，應考慮回傳：
 
-解析整數時需要確認：
+```cpp
+std::vector<std::string>
+```
 
-- 是否允許前導空白。
-- 是否允許 `+` 或 `-`。
-- 是否至少要有一個數字。
-- 是否允許前導 0。
-- 超出目標型別範圍如何回報。
-- 解析到非法 Byte 時停止，還是整體失敗。
+### 數字解析還要定義什麼
 
-Overflow 應在乘以 10 與加入下一位數字之前檢查，而不是等結果已超出型別範圍後再判斷。
+解析整數時還要確認：
 
-### 6.13 C 語言中的字串
+- 是否允許前導空白？
+- 是否允許 `+` 或 `-`？
+- 是否至少需要一個數字？
+- 是否允許前導零？
+- 遇到非法 Byte 時停止，還是整體失敗？
+- 超出目標型別範圍時如何回報？
 
-C String 通常以 `char` Array 儲存，並使用 Null Terminator `\0` 表示結尾：
+Overflow 應在乘以 10 與加入下一位數字之前檢查，而不是結果已經溢位後再判斷。
+
+---
+
+## 6.14 補充：C String
+
+### C String 如何表示結尾
+
+C String 通常以 `char` Array 儲存，並使用 Null Terminator `\0` 表示結尾。
 
 ```c
 char text[] = "abc";
 ```
 
-記憶體內容為：
+記憶體內容概念上是：
 
 ```text
 'a' 'b' 'c' '\0'
@@ -1195,42 +1709,36 @@ char text[] = "abc";
 
 Array 容量是 4，文字長度是 3。
 
-#### 容量與文字長度
+### Capacity 與 Length
 
-在 C 中尤其需要區分：
+必須分清：
 
-- Buffer Capacity：配置了多少 Bytes。
+- Buffer Capacity：總共配置多少 Bytes。
 - String Length：第一個 `\0` 前有多少 Bytes。
-- 寫入後是否仍保留 Null Terminator 空間。
+- 是否保留一格寫入最後的 `\0`。
 
-若 Buffer 容量為 `capacity`，最多只能保存 `capacity - 1` 個非 Null Bytes，最後一格要留給 `\0`。
+若 Capacity 是 `capacity`，最多只能保存 `capacity - 1` 個非 Null Bytes。
 
-#### `strlen` 的成本與前置條件
+### `strlen` 的前置條件與成本
 
-`strlen(text)` 從起點走訪到第一個 `\0`，時間為 O(n)。Precondition 是傳入位置後方存在可達的 Null Terminator。若 Buffer 沒有終止 Byte，函式可能讀出有效範圍。
+`strlen(text)` 從起點一路尋找第一個 `\0`，時間為 O(n)。
 
-在迴圈條件中反覆呼叫 `strlen`，可能重複掃描：
+前置條件是後方確實存在可達的 Null Terminator。若沒有，函式可能讀出有效範圍。
 
-```c
-for (size_t i = 0; i < strlen(text); ++i)
-{
-    process(text[i]);
-}
-```
-
-若字串不會在迴圈中改變，可先保存長度：
+避免在不變的字串上重複呼叫：
 
 ```c
 size_t length = strlen(text);
+
 for (size_t i = 0; i < length; ++i)
 {
     process(text[i]);
 }
 ```
 
-#### 明確傳入長度
+### 明確傳入 Pointer 與 Length
 
-若資料可以內含 Null Byte，或本來就不是 C String，應傳入 Pointer 與 Length：
+若資料可以包含 Null Byte，或本來就不是 C String，應明確傳入資料位置與長度：
 
 ```c
 void process_bytes(
@@ -1238,9 +1746,9 @@ void process_bytes(
     size_t length);
 ```
 
-此時不能使用 `strlen` 判斷資料大小。
+此時不能使用 `strlen` 推測資料大小。
 
-#### 安全建構介面
+### 安全追加一個字元
 
 ```c
 #include <stdbool.h>
@@ -1266,126 +1774,259 @@ bool append_char(
     buffer[*length] = ch;
     ++(*length);
     buffer[*length] = '\0';
+
     return true;
 }
 ```
 
-成功時必須同時維持：
+成功後同時維持：
 
 - `*length < capacity`。
 - `buffer[*length] == '\0'`。
 - `[0, *length)` 是有效文字內容。
 
-#### C 與 UTF-8
+### C 與 UTF-8
 
-使用 `char*` 並不代表每個 `char` 是一個 Unicode 字元。UTF-8 在 C 中同樣是多 Byte 編碼，逐 `char` 反轉或截斷仍可能破壞編碼。
+使用 `char*` 不代表每個 `char` 是一個 Unicode 字元。UTF-8 在 C 中仍是多 Byte 編碼，逐 `char` 反轉或截斷仍可能破壞文字。
 
-### 6.14 建立自己的字串分析表
+---
 
-<table>
-<tr><th>欄位</th><th>要回答的問題</th></tr>
-<tr><td>編碼</td><td>ASCII、UTF-8、其他編碼，還是純 Byte 資料？</td></tr>
-<tr><td>比較單位</td><td>Byte、Code Point 還是可見字形？</td></tr>
-<tr><td>Normalize</td><td>是否忽略大小寫、空白、標點或其他內容？</td></tr>
-<tr><td>區間</td><td>使用 `[left, right)` 還是位置加長度？</td></tr>
-<tr><td>候選結構</td><td>Substring、Subsequence 還是其他選取方式？</td></tr>
-<tr><td>字元範圍</td><td>只含小寫英文、ASCII、任意 Byte 或 Unicode？</td></tr>
-<tr><td>頻率結構</td><td>固定 Array、256 格 Array、Hash Map 或 Ordered Map？</td></tr>
-<tr><td>Ownership</td><td>結果需要擁有資料，還是 View 即可？</td></tr>
-<tr><td>生命週期</td><td>原始字串會活多久？是否會修改或 Reallocation？</td></tr>
-<tr><td>複製成本</td><td>是否在迴圈或遞迴中反覆建立 Substring？</td></tr>
-<tr><td>建構方式</td><td>尾端追加、預先建立大小，還是反覆前端插入？</td></tr>
-<tr><td>解析規則</td><td>空 Token、連續 Delimiter 與尾端 Delimiter 如何處理？</td></tr>
-<tr><td>錯誤表示</td><td>非法輸入、Overflow 或缺少 Token 時如何回報？</td></tr>
-<tr><td>邊界案例</td><td>空字串、單一 Byte、多 Byte 文字與內含 Null 如何處理？</td></tr>
-</table>
+## 6.15 字串題的固定分析流程
 
-### 6.15 常見問題與判讀
+遇到新題目時，可以依序問以下問題。
 
-<table>
-<tr><th>現象</th><th>可能原因</th><th>第一輪檢查</th></tr>
-<tr><td>Unicode 長度比預期大</td><td>把 Byte 數當成可見字元數</td><td>確認編碼與計數單位</td></tr>
-<tr><td>反轉後出現亂碼</td><td>逐 Byte 反轉 UTF-8</td><td>是否需要依 Code Point 或 Grapheme Cluster 處理</td></tr>
-<tr><td>Frequency Array 越界</td><td>字元範圍假設不成立</td><td>是否真的只含 `'a'` 到 `'z'`</td></tr>
-<tr><td>`isdigit` 在部分輸入異常</td><td>直接傳入負值 `char`</td><td>先轉成 `unsigned char`</td></tr>
-<tr><td>Substring 範圍太長</td><td>把右邊界當成 `substr` 的 Count</td><td>Count 是否應為 `right - left`</td></tr>
-<tr><td>遞迴輸入不大但執行很慢</td><td>每層複製 Substring</td><td>改傳 Index、區間或 `string_view`</td></tr>
-<tr><td>View 內容突然改變或失效</td><td>原資料被銷毀、修改或重新配置</td><td>檢查 Ownership 與生命週期</td></tr>
-<tr><td>C 函式讀到 View 範圍之外</td><td>`string_view` 不保證 Null-terminated</td><td>是否需要建立 `std::string` 副本</td></tr>
-<tr><td>回文答案和預期不同</td><td>Normalize 規則不一致</td><td>大小寫、標點、空白與編碼如何定義</td></tr>
-<tr><td>Subsequence 判斷漏解</td><td>當成連續 Substring</td><td>是否允許跳過元素但保持順序</td></tr>
-<tr><td>建構長字串愈來愈慢</td><td>反覆前端插入或建立完整暫時字串</td><td>改成尾端追加並視需要 `reserve`</td></tr>
-<tr><td>Split 漏掉最後一個 Token</td><td>只在遇到 Delimiter 時輸出</td><td>迴圈結束後是否處理尾端範圍</td></tr>
-<tr><td>連續 Delimiter 結果不一致</td><td>空 Token 規格未定義</td><td>明確決定保留或忽略空 Token</td></tr>
-<tr><td>C String 偶爾讀取越界</td><td>缺少 Null Terminator</td><td>Buffer 是否保留一格並在結尾寫入 `\0`</td></tr>
-<tr><td>含 Null Byte 的資料被截短</td><td>傳給依賴 C String 的介面</td><td>改用 Pointer 加 Length 介面</td></tr>
-</table>
+### 第一步：資料單位是什麼
 
+- ASCII？
+- 任意 Byte？
+- UTF-8 Code Point？
+- Grapheme Cluster？
 
+若題目保證只含小寫英文字母，就不需要一開始處理完整 Unicode。
 
-#### 針對 `substr` 與共同子串的判讀
+### 第二步：比較規則是什麼
 
-- 若已經知道 `[left, right)`，可以用 `text.substr(left, right - left)` 切出結果。
-- 若尚未知道共同片段在哪裡，應先寫搜尋邏輯，再使用 `substr` 輸出答案。
-- 若只判斷固定 Pattern 是否存在，可先考慮 `find`。
-- 若要最長共同 Substring，可使用雙迴圈或 DP。
-- 若要最長共同 Subsequence，問題模型不同，不能沿用同一個 DP 轉移式。
+- 是否區分大小寫？
+- 是否忽略空白？
+- 是否忽略標點？
+- 數字是否參與比較？
+- 空字串如何定義？
 
-<table>
-<tr><th>問題</th><th>判讀方向</th><th>檢查重點</th></tr>
-<tr><td>`substr(1, 4)` 為什麼得到 `bcde`？</td><td>第二個參數是 Count</td><td>若目標是 `[1, 4)`，應傳 `4 - 1`</td></tr>
-<tr><td>兩個字串要找共同片段</td><td>這是搜尋問題</td><td>`substr` 只適合在已知區間後切出答案</td></tr>
-<tr><td>`abc` 和 `abcabc` 都是共同子串，該回傳誰？</td><td>看 Postcondition</td><td>若要求最長，應回傳較長且連續的那段</td></tr>
-<tr><td>DP 遇到不同字元時為什麼歸零？</td><td>Substring 必須連續</td><td>斷開後不能延續前一段共同長度</td></tr>
-<tr><td>能不能用 `string_view` 取代所有 `substr`？</td><td>只能在生命週期安全時使用</td><td>確認原資料是否仍存在且位置穩定</td></tr>
-</table>
+### 第三步：候選結構是什麼
 
-### 6.16 本章檢查表
+- 連續區間：Substring。
+- 保持順序、可跳過：Subsequence。
+- 不重視順序：可能是 Set 或 Multiset 類型問題。
 
-- 我知道 `std::string` 的 `size()` 回傳 Byte 數量。
-- 我不會在未確認編碼時，把 Byte 數直接稱為 Unicode 字元數。
-- 我能區分 Byte、Unicode Code Point 與 Grapheme Cluster。
-- 我會先定義大小寫、空白、標點與其他 Normalize 規則。
+### 第四步：需要保存什麼狀態
+
+- 回文：左右 Index。
+- Subsequence：下一個待配對位置。
+- 頻率統計：Array 或 Map。
+- Sliding Window：左右邊界與 Window 內狀態。
+
+### 第五步：區間如何表示
+
+優先考慮：
+
+```text
+[begin, end)
+```
+
+並確認 API 接受的是右邊界，還是數量。
+
+### 第六步：是否正在複製資料
+
+檢查：
+
+- 迴圈中是否反覆呼叫 `std::string::substr`？
+- 遞迴參數是否按值傳遞整個字串？
+- 是否反覆使用 `result = result + piece`？
+- 是否可以改傳 Index、區間或 View？
+
+### 第七步：Ownership 與生命週期
+
+若使用 `string_view`：
+
+- 原字串是否活得夠久？
+- 原字串是否會修改？
+- 是否可能 Reallocation？
+- 結果是否需要獨立保存？
+
+### 第八步：建立邊界測試
+
+至少測試：
+
+- 空字串。
+- 單一元素。
+- 全部相同。
+- 完全不匹配。
+- 重複字元。
+- 開頭與結尾邊界。
+- 非 ASCII 輸入是否符合目前 Precondition。
+- Delimiter 在開頭、結尾與連續出現。
+
+---
+
+## 6.16 常見問題與判讀
+
+### `size()` 比看到的字數大
+
+可能原因：輸入是 UTF-8，而 `size()` 計算 Bytes。
+
+先確認需求要計算：
+
+- Byte。
+- Code Point。
+- Grapheme Cluster。
+
+### 反轉後出現亂碼
+
+可能原因：逐 Byte 反轉多 Byte UTF-8 序列。
+
+先確認是否需要 UTF-8 解碼，甚至需要依 Grapheme Cluster 處理。
+
+### `substr` 取出的範圍太長
+
+可能原因：把右邊界當成第二個參數。
+
+若目標是 `[left, right)`：
+
+```cpp
+text.substr(left, right - left)
+```
+
+### Frequency Array 越界
+
+可能原因：輸入不符合值域假設。
+
+若使用 26 格 Array，先確認每個輸入都在 `'a'` 到 `'z'`。
+
+### `isdigit` 或 `tolower` 在部分輸入異常
+
+可能原因：直接傳入負值 `char`。
+
+先轉成：
+
+```cpp
+static_cast<unsigned char>(ch)
+```
+
+### 遞迴輸入不大，但執行很慢
+
+可能原因：每層建立新的 Substring，或按值複製整個字串。
+
+考慮改傳：
+
+- `const std::string&` 加 Index。
+- `[left, right)`。
+- 生命週期安全的 `string_view`。
+
+### `string_view` 內容突然改變或失效
+
+檢查：
+
+- 原字串是否已被銷毀？
+- 是否來自暫時物件？
+- 原字串是否修改或 Reallocation？
+
+### Split 漏掉最後一個 Token
+
+可能原因：只在遇到 Delimiter 時加入 Token，沒有在 `npos` 時處理尾端範圍。
+
+### 連續 Delimiter 的結果不符合預期
+
+可能原因：空 Token 規格沒有先定義。
+
+先決定：
+
+- 保留空 Token。
+- 忽略空 Token。
+- 空輸入代表零個還是一個 Token。
+
+### 回文答案與預期不同
+
+先不要急著改迴圈，先確認：
+
+- 是否區分大小寫？
+- 是否忽略空格與標點？
+- 是逐 Byte 比較，還是更高層的 Unicode 文字單位？
+
+---
+
+## 6.17 本章檢查表
+
+### 基本模型
+
+- 我知道 `std::string` 可以依 Index 存取 `char`。
+- 我知道合法 Index 是 `[0, size())`。
+- 我知道空字串不能存取 `text[0]`。
+- 我知道 `size()` 回傳 `std::size_t`。
+
+### 編碼
+
+- 我知道 `std::string::size()` 回傳 Byte 數量。
+- 我不會將 Byte 數直接稱為 Unicode 字元數。
+- 我能區分 Byte、Code Point 與 Grapheme Cluster。
+- 我知道逐 Byte 反轉可能破壞 UTF-8。
+
+### 區間與問題模型
+
+- 我能使用 `[begin, end)` 表示區間。
+- 我知道 `substr(position, count)` 的第二個參數是數量。
 - 我能區分 Substring、Subsequence 與 Subset。
-- 我知道 `substr(position, count)` 的第二個參數是長度，不是右邊界。
-- 我知道 `substr` 是切片工具，不負責搜尋兩個字串的共同片段。
-- 我能區分固定 Pattern 搜尋、最長共同子串與最長共同子序列。
-- 我能用雙 Index 與 Invariant 說明 Subsequence 判斷。
-- 我能使用不發生 Unsigned Underflow 的回文區間。
-- 我知道 ASCII 回文方法不能直接代表完整 Unicode 文字處理。
+- 我知道 `substr` 是切片工具，不是搜尋方法。
+
+### 回文與分類
+
+- 我會先定義大小寫、空白、標點與數字規則。
+- 我能使用左右指標判斷回文。
+- 我知道如何避免空字串上的 Unsigned Underflow。
 - 我會在呼叫 `<cctype>` 函式前轉成 `unsigned char`。
-- 我知道固定 Frequency Array 需要明確的字元範圍 Precondition。
-- 我能依值域選擇 26 格 Array、256 格 Array 或 Map。
-- 我會根據最大輸入長度選擇頻率計數型別。
-- 我了解 `std::string::substr` 通常會建立副本。
-- 我能使用 Index、Half-open Interval 或 `string_view` 減少重複複製。
-- 我知道 `string_view` 不擁有資料，也不延長原資料生命週期。
+- 我知道 ASCII 解法不等於完整 Unicode 解法。
+
+### 頻率
+
+- 我知道固定 Frequency Array 需要明確值域。
+- 我能依需求選擇 26 格 Array、256 格 Array 或 Map。
+- 我知道 Anagram 可以使用頻率差值判斷。
+
+### 複製與生命週期
+
+- 我知道 `std::string::substr` 通常建立副本。
+- 我會檢查迴圈與遞迴中的總複製成本。
+- 我能使用 Index、區間或 `string_view` 表示子問題。
+- 我知道 `string_view` 不擁有資料。
 - 我不會回傳指向區域 `std::string` 的 View。
-- 我知道原字串 Reallocation 可能讓既有 View 失效。
-- 我知道 `string_view::data()` 不保證在 View 結尾處有 Null Terminator。
-- 我能區分 `reserve` 與實際建立字元。
-- 我會避免在迴圈中反覆從字串前端插入。
-- 我會為 Split 明確定義空 Token 與尾端 Delimiter 行為。
-- 我知道回傳 `vector<string_view>` 時，輸入資料必須持續有效。
-- 我知道 C String 需要 Null Terminator，且 Capacity 必須保留結尾空間。
-- 我知道 `strlen` 需要可達的 Null Terminator，而且每次呼叫都可能重新走訪。
+- 我知道 Reallocation 可能讓 View 失效。
+- 我知道 View 結尾不保證有 Null Terminator。
 
-### 6.17 本章重點
+### 建構、解析與 C String
 
-- `std::string` 是連續 Byte 容器，不是 Unicode 可見字形容器。
-- ASCII 常可用一個 Byte 表示一個字元，但 UTF-8 使用可變數量 Bytes。
-- 字串題開始前，應先確認編碼、比較單位與 Normalize 規則。
-- Substring 必須連續；Subsequence 可跳過元素，但必須保持原順序。
-- `std::string::substr` 適合在已知位置與長度後切出結果；共同子串問題仍需要搜尋方法先決定區間。
-- Two Pointers 適合由左右兩端比較回文，Half-open Interval 可安全處理空字串。
-- `<cctype>` 函式的 `char` 輸入應先轉成 `unsigned char`。
-- 頻率資料結構由字元值域決定，固定 Array 需要明確 Precondition。
-- `std::string::substr` 通常會複製內容，反覆使用可能增加時間與空間成本。
-- Index 與 Half-open Interval 可以在不複製字串的情況下表示子問題。
-- `std::string_view` 可建立非擁有 View，但原資料必須保持有效且位置穩定。
-- View 不保證 Null-terminated，需要 C String 時應建立擁有資料的字串。
-- 已知大致結果長度時可先 `reserve`，再從尾端使用 `push_back` 或 `+=`。
-- 反覆前端插入需要搬移既有內容，可能形成 O(n²)。
-- 解析前應定義 Delimiter、空 Token、空白、非法輸入與 Overflow 規則。
-- C String 使用 `\0` 表示結尾，必須同時管理 Buffer Capacity 與目前 Length。
-- 字串演算法的正確性不只取決於迴圈，也取決於編碼、Ownership 與生命週期假設。
+- 我能區分 `reserve`、`resize` 與實際 Size。
+- 我會避免反覆從字串前端插入。
+- 我會先定義 Split 的空 Token 規格。
+- 我知道 `vector<string_view>` 依賴原輸入生命週期。
+- 我知道 C String 必須有 Null Terminator。
+- 我知道 Buffer Capacity 必須保留結尾空間。
+- 我知道 `strlen` 每次都可能重新走訪字串。
+
+---
+
+## 6.18 本章重點
+
+1. 先把 `std::string` 理解成依序存放 `char` 的容器，再逐步加入編碼觀念。
+2. 對 ASCII 題目，逐 `char` 處理通常合理；對 UTF-8，Byte 不一定是完整文字單位。
+3. 字串演算法開始前，先定義比較規則與資料單位。
+4. Substring 必須連續；Subsequence 可以跳過元素，但順序不能改變。
+5. 判斷 Subsequence 時，只需要記錄下一個待配對位置。
+6. 回文可以使用左右指標，Half-open Interval 能安全表示空範圍。
+7. 忽略標點與大小寫可以先建立整理後字串，也可以在比較時直接套用規則。
+8. Frequency Array 的正確性依賴明確的字元值域。
+9. `std::string::substr` 負責依已知位置與長度建立新字串，不負責搜尋答案。
+10. 反覆建立 Substring 可能累積大量複製成本。
+11. `string_view` 不擁有資料，使用它時必須追蹤原資料生命週期。
+12. `reserve` 只保留 Capacity，不會建立可用元素。
+13. 字串解析必須先定義空 Token、Delimiter 與錯誤處理規則。
+14. C String 以 `\0` 表示結尾，必須同時管理 Capacity、Length 與 Null Terminator。
+15. 看不懂某個進階細節時，可以先回到三個問題：處理單位是什麼、候選是否連續、資料由誰擁有。
