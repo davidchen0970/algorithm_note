@@ -1233,22 +1233,28 @@ int main()
 
 std::string longestCommonSubstring(const std::string& first, const std::string& second)
 {
-    std::size_t bestBegin = 0;
-    std::size_t bestLength = 0;
+    std::size_t bestBegin = 0;      // 記錄目前找到的最長公共子字串在 first 中的起始位置
+    std::size_t bestLength = 0;     // 記錄目前找到的最長公共子字串長度
 
+    // 窮舉 first 的每個可能起始點 i
     for (std::size_t i = 0; i < first.size(); ++i)
     {
+        // 窮舉 second 的每個可能起始點 j
         for (std::size_t j = 0; j < second.size(); ++j)
         {
+            // 從 first[i] 與 second[j] 開始的比對長度
             std::size_t length = 0;
 
+            // 當兩邊都沒有越界，且當前位置的字元相同時，繼續往後比對
             while (i + length < first.size() &&
                    j + length < second.size() &&
                    first[i + length] == second[j + length])
             {
+                // 字元相同，長度加 1，繼續檢查下一個字元
                 ++length;
             }
 
+            // 如果這次比對出來的長度比之前記錄的還長，就更新最佳紀錄
             if (length > bestLength)
             {
                 bestBegin = i;
@@ -1257,6 +1263,7 @@ std::string longestCommonSubstring(const std::string& first, const std::string& 
         }
     }
 
+    // 根據找到的最佳起始位置與長度，擷取並傳回最長公共子字串
     return first.substr(bestBegin, bestLength);
 }
 ```
