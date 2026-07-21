@@ -74,7 +74,6 @@
 - [6.17 本章檢查表](#617-本章檢查表)
 - [6.18 本章重點](#618-本章重點)
 
----
 
 ## 6.1 先把 String 當成一排 char
 
@@ -163,7 +162,6 @@ for (std::size_t i = 0; i < text.size(); ++i)
 - 空字串的 `size()` 是 0，不能存取 `text[0]`。
 - 目前先假設輸入只含 ASCII，6.3 再處理 UTF-8。
 
----
 
 ## 6.2 長度、Index、走訪與區間
 
@@ -263,7 +261,6 @@ std::string part = text.substr(1, 4);
 - 本章使用 `[begin, end)`。
 - `substr(position, count)` 的第二個參數是數量。
 
----
 
 ## 6.3 Byte、ASCII 與 UTF-8
 
@@ -367,7 +364,6 @@ data.size() == 3
 - UTF-8 的一個文字單位可能占用多個 Bytes。
 - 看到「字元」一詞時，要先問它指哪一層。
 
----
 
 ## 6.4 先定義比較規則
 
@@ -458,7 +454,6 @@ A man, a plan, a canal: Panama
 - 規格描述「比較什麼」，實作再決定「何時整理」。
 - 不要還沒確認規格，就先選演算法。
 
----
 
 ## 6.5 Substring 與 Subsequence
 
@@ -539,7 +534,6 @@ Subsequence "ace"：
 
 先分清問題模型，再選方法。
 
----
 
 ## 6.6 完整案例：判斷 Subsequence
 
@@ -655,7 +649,6 @@ candidate[0, matched)
 - 時間：O(text.size())。
 - 額外空間：O(1)。
 
----
 
 ## 6.7 從最簡單的回文開始
 
@@ -764,7 +757,6 @@ bool isPalindrome(std::string_view text)
 - 時間：O(n)。
 - 額外空間：O(1)。
 
----
 
 ## 6.8 完整案例：忽略標點與大小寫的回文
 
@@ -934,7 +926,6 @@ char toLower(char ch)
 
 本案例只定義 ASCII 分類與大小寫轉換。若需求包含完整 Unicode Case Folding、Normalization Form 或 Grapheme Cluster，應使用適合的 Unicode 函式庫，不能直接將這組函式視為完整 Unicode 解法。
 
----
 
 ## 6.9 字元頻率與 Anagram
 
@@ -1090,7 +1081,6 @@ bool areAnagrams(
 - 時間：O(n)。
 - 額外空間：O(1)，因為 Array 大小固定為 26。
 
----
 
 ## 6.10 `substr`：切出內容與複製成本
 
@@ -1358,7 +1348,6 @@ DP 決定 `bestEnd` 與 `bestLength`，`substr` 仍只負責把已知答案區�
 - `substr` 不會替你決定答案在哪裡。
 - Substring 與 Subsequence 的連續性不同，不能共用同一套轉移規則。
 
----
 
 ## 6.11 `string_view`：只看資料，不擁有資料
 
@@ -1484,7 +1473,6 @@ useCFunction(owned.c_str());
 - 不需要，而且原資料一定活得夠久：可以考慮 `string_view`。
 - 無法確定生命週期：優先選擇擁有資料的型別。
 
----
 
 ## 6.12 有效率地建構字串
 
@@ -1573,7 +1561,6 @@ result += piece;
 - 尾端追加通常比反覆前端插入更合適。
 - 先估算最終長度，可以減少重新配置。
 
----
 
 ## 6.13 字串解析與 Split
 
@@ -1689,7 +1676,6 @@ std::vector<std::string>
 
 Overflow 應在乘以 10 與加入下一位數字之前檢查，而不是結果已經溢位後再判斷。
 
----
 
 ## 6.14 補充：C String
 
@@ -1789,7 +1775,6 @@ bool append_char(
 
 使用 `char*` 不代表每個 `char` 是一個 Unicode 字元。UTF-8 在 C 中仍是多 Byte 編碼，逐 `char` 反轉或截斷仍可能破壞文字。
 
----
 
 ## 6.15 字串題的固定分析流程
 
@@ -1866,7 +1851,6 @@ bool append_char(
 - 非 ASCII 輸入是否符合目前 Precondition。
 - Delimiter 在開頭、結尾與連續出現。
 
----
 
 ## 6.16 常見問題與判讀
 
@@ -1952,7 +1936,6 @@ static_cast<unsigned char>(ch)
 - 是否忽略空格與標點？
 - 是逐 Byte 比較，還是更高層的 Unicode 文字單位？
 
----
 
 ## 6.17 本章檢查表
 
@@ -2011,7 +1994,6 @@ static_cast<unsigned char>(ch)
 - 我知道 Buffer Capacity 必須保留結尾空間。
 - 我知道 `strlen` 每次都可能重新走訪字串。
 
----
 
 ## 6.18 本章重點
 
