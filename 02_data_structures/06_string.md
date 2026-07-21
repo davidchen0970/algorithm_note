@@ -1030,9 +1030,7 @@ std::array<std::size_t, 256> countBytes(
 #include <array>
 #include <string_view>
 
-bool areAnagrams(
-    std::string_view first,
-    std::string_view second)
+bool areAnagrams(std::string_view first, std::string_view second)
 {
     if (first.size() != second.size())
     {
