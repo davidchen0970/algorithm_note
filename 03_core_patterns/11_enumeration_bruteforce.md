@@ -331,15 +331,16 @@ for (int left = 0; left < n; ++left)
 {
     long long sum = 0;
 
-    for (int right = left; right < n; ++right)
+    // end 代表結束邊界 exclusive，區間為 [left, end)
+    for (int end = left + 1; end <= n; ++end)
     {
-        sum += nums[right];
-        check(left, right + 1, sum);
+        sum += nums[end - 1];
+        check(left, end, sum);
     }
 }
 ```
 
-相鄰區間共用前一個 Sum，將總時間降為 O(n²)。這個改善直接來自辨識重複工作。
+這裡仍然維持 Half-open Interval `[left, end)`。每次 `end` 往右擴張一格時，新加入的元素是 `nums[end - 1]`。相鄰區間共用前一個 Sum，將總時間降為 O(n²)。這個改善直接來自辨識重複工作。
 
 ### 11.6 Subset 與 Bitmask
 
@@ -376,7 +377,7 @@ for (std::uint64_t mask = 0;
 ```
 
 ```mermaid
-flowchart TD
+flowchart LR
     M0[mask 000<br/>空集合]
     M1[mask 001<br/>選 Index 0]
     M2[mask 010<br/>選 Index 1]
@@ -528,6 +529,78 @@ C(n, k)
 ```text
 n!
 ```
+
+#### C++ 標準庫：`std::next_permutation`
+
+若目標只是依字典序產生所有排列，C++ 可以使用 `std::next_permutation`。使用前通常需先排序，這樣可以從最小字典序開始列出所有排列。
+
+```cpp
+#include <algorithm>
+#include <vector>
+
+std::sort(nums.begin(), nums.end());
+
+do
+{
+    process(nums);
+}
+while (std::next_permutation(nums.begin(), nums.end()));
+```
+
+若 `nums` 內有重複值，`std::next_permutation` 會依照序列本身的不同排列前進，不會額外產生相同 Value 序列的重複輸出。這很適合快速驗證排列相關題目。不過，若題目需要在搜尋過程中加入限制、剪枝或部分 State 判斷，仍通常需要手寫 Backtracking。
+
+#### Permutation 遇到重複值的去重
+
+Permutation 的重複值去重不能直接套用 Combination 的 `i > start`。Combination 每層從 `start` 往右選，Permutation 每層則是在「目前位置」選任一尚未使用的 Index，因此需要 `used` 陣列。
+
+使用前需先排序 `nums`，再搭配 `used` 維持相同 Value 的穩定選取順序：
+
+```cpp
+#include <algorithm>
+#include <vector>
+
+void permuteUnique(
+    std::vector<int>& nums,
+    int pos,
+    std::vector<int>& curr,
+    std::vector<bool>& used,
+    std::vector<std::vector<int>>& res)
+{
+    if (pos == static_cast<int>(nums.size()))
+    {
+        res.push_back(curr);
+        return;
+    }
+
+    for (int i = 0; i < static_cast<int>(nums.size()); ++i)
+    {
+        if (used[i])
+        {
+            continue;
+        }
+
+        // 核心去重：若前一個相同值尚未被使用，
+        // 代表本分支想先使用後面的重複值，會產生等價排列。
+        if (i > 0 && nums[i] == nums[i - 1] && !used[i - 1])
+        {
+            continue;
+        }
+
+        used[i] = true;
+        curr.push_back(nums[i]);
+
+        permuteUnique(nums, pos + 1, curr, used, res);
+
+        curr.pop_back();
+        used[i] = false;
+    }
+}
+
+// 呼叫前：
+// std::sort(nums.begin(), nums.end());
+```
+
+條件 `!used[i - 1]` 保證重複元素只會以排序後的相對順序被選入，避免產生鏡像般的重複排列。
 
 #### 搜尋樹決策不同
 
@@ -720,6 +793,35 @@ currentSum > target
 4. 若加入負數、重複值或不同排序，推理是否仍成立？
 5. 能否使用未剪枝版本進行小型對拍？
 
+#### 常見錯誤警示：在迴圈內過早 `return`
+
+> 在搜尋樹的 `for` 迴圈內進行剪枝時，若條件只排除目前候選，嚴禁直接使用 `return`。`return` 會結束整個函式，連同同層尚未檢查的 sibling branches 一起跳過，容易造成漏解。
+
+```cpp
+for (int i = start; i < n; ++i)
+{
+    if (!canChoose(i))
+    {
+        continue; // 只跳過目前候選
+    }
+
+    if (tooLarge(i))
+    {
+        break; // 若候選已排序，後續候選也都不可能合法
+    }
+
+    choose(i);
+    dfs(i + 1);
+    undo(i);
+}
+```
+
+判斷方式可以整理如下：
+
+- `continue`：跳過目前候選，其他平行分支仍需檢查。
+- `break`：在排序或單調性成立時，停止本層後續候選。
+- `return`：只有在能證明目前函式代表的整個 Subtree 都不可能產生答案時才使用。
+
 ### 11.12 複雜度與輸出大小
 
 常見搜尋空間：
@@ -907,7 +1009,7 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 - 我能計算 Pair 與非空連續區間數量。
 - 我會區分候選數量與每個候選的檢查成本。
 - 我知道每個區間重新求和可能形成 O(n³)。
-- 我能使用固定 Left 累積 Sum 降低重複工作。
+- 我能使用固定 Left 搭配 Half-open 結束邊界 `end` 累積 Sum，降低重複工作。
 - 我知道 n 個元素共有 `2^n` 個 Subset，包含空集合。
 - 我會檢查 Bitmask 型別寬度與位移範圍，避免 Undefined Behavior。
 - 我能用搜尋樹說明每層的選或不選。
@@ -921,6 +1023,7 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 - 我知道同層去重不代表所有層都略過相同 Value。
 - 我能為每項剪枝說明所依賴的 Precondition。
 - 我能證明剪枝排除的是整個不可能 Subtree。
+- 我知道在迴圈內剪枝時，`return`、`continue` 與 `break` 的語意不同。
 - 我知道輸出所有 Subset 或 Permutation 本身就需要大量時間。
 - 我知道若只需逐一處理候選，可以使用 callback 避免保存全部結果。
 - 我會保留小型直接解法作為 Oracle。
