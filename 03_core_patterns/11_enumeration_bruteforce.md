@@ -202,6 +202,8 @@ for (int i = 0; i < n; ++i)
 
 #### C++ 直接解法
 
+> 本範例使用 C++17 的 `std::optional`。若環境仍停在 C++11/14，可改用 `std::pair<bool, std::pair<int, int>>`，或由呼叫端傳入輸出參數表示是否找到答案。
+
 ```cpp
 #include <optional>
 #include <utility>
@@ -374,7 +376,7 @@ for (std::uint64_t mask = 0;
 ```
 
 ```mermaid
-flowchart LR
+flowchart TD
     M0[mask 000<br/>空集合]
     M1[mask 001<br/>選 Index 0]
     M2[mask 010<br/>選 Index 1]
@@ -383,8 +385,10 @@ flowchart LR
     M5[mask 101<br/>選 0,2]
     M6[mask 110<br/>選 1,2]
     M7[mask 111<br/>全選]
-    M0 --> M1 --> M2 --> M3 --> M4 --> M5 --> M6 --> M7
+    M0 --- M1 --- M2 --- M3 --- M4 --- M5 --- M6 --- M7
 ```
+
+上圖只是表示 `mask` 的數值遞增順序，不代表決策樹中的父子關係。Bitmask 枚舉時，每個 `mask` 都是獨立的一個 Subset 表示。
 
 #### 位移前置條件
 
@@ -444,6 +448,38 @@ void enumerateSubsets(
 - `index`：下一個尚未決定的輸入位置。
 - `current`：對 `[0, index)` 已完成選或不選後形成的 Subset。
 - `result`：已完整產生的 Subset。
+
+#### 若只需處理，不需保存所有 Subset
+
+上面的版本會將所有結果放入 `result`。若 `n = 25`，Subset 數量約為 3,300 萬，長期保存所有結果很容易耗盡記憶體。
+
+若題目只要求逐一處理每個 Subset，例如計算答案、更新最佳值或列印輸出，可以改成 callback：
+
+```cpp
+template <class Process>
+void enumerateSubsetsWithCallback(
+    const std::vector<int>& nums,
+    int index,
+    std::vector<int>& current,
+    Process process)
+{
+    if (index == static_cast<int>(nums.size()))
+    {
+        process(current);
+        return;
+    }
+
+    enumerateSubsetsWithCallback(
+        nums, index + 1, current, process);
+
+    current.push_back(nums[index]);
+    enumerateSubsetsWithCallback(
+        nums, index + 1, current, process);
+    current.pop_back();
+}
+```
+
+這樣仍需走訪 `O(2^n)` 個候選，但額外空間可維持在遞迴深度與 `current` 所需的 `O(n)`，不需要保存 `O(2^n)` 份結果。
 
 #### 為什麼需要回復 State
 
@@ -564,6 +600,8 @@ needed = k - current.size()
 
 個元素，而從 `value` 到 n 的候選數不足 `needed`，就不必繼續。
 
+這個剪枝依賴候選集合已經具備固定遞增順序。在本題中，候選是連續整數 `[1, n]`，因此可以直接根據 `value` 到 `n` 的剩餘數量判斷。若題目改成從任意 Array 中選 k 個元素，通常需要先排序，或至少確保遞迴的候選順序可以正確表示「後面還剩多少候選」。
+
 可將迴圈上界改成：
 
 ```cpp
@@ -607,7 +645,7 @@ flowchart TD
 
 若輸出只關心 Value，`[2A, 3]` 與 `[2B, 3]` 應只保留一份 `[2, 3]`。
 
-常見方式是先排序，再在同一搜尋層略過重複 Value：
+常見方式是先排序，再在同一搜尋層略過重複 Value。若為了按 Value 去重而先排序，整體時間複雜度應額外包含 `O(n log n)`。在 Subset、Combination 或 Permutation 的輸出數量很大時，排序成本通常不是主項，但分析時仍應列出。
 
 ```cpp
 for (int i = start; i < n; ++i)
@@ -849,14 +887,16 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 | 區間少一個元素 | Inclusive 與 Half-open 混用 | 明確使用 `[left,right)` |
 | 區間解法變成 O(n³) | 每個區間重新走訪求和 | 固定 Left 時累積 Sum |
 | Subset 數量不對 | 忘記空集合或重複 Mask | 是否包含 `mask = 0` |
-| Bitmask 位移錯誤 | 型別寬度不足或 n 過大 | 位移量是否小於型別 Bit 數 |
+| Bitmask 位移錯誤 | 型別寬度不足或 n 過大 | 位移量是否小於型別 Bit 數，避免 Undefined Behavior |
 | Combination 出現順序重複 | 後續仍可選較小 Index | 使用遞增 `start` |
 | Permutation 少解 | 過早限制只能向右選 | 每層應選任一未使用 Index |
+| Permutation 重複答案 | 重複 Value 未搭配 `used` 做穩定去重 | 排序後使用 `used` 與 `!used[i - 1]` 判斷 |
 | 重複答案 | 去重層級錯誤 | 按 Index 還是按 Value；同層還是跨層 |
 | Backtracking 分支互相污染 | 遞迴後未回復 State | Push 後是否對應 Pop |
 | 剪枝後漏解 | 剪枝 Precondition 不成立 | 負數、排序、單調性與上界推理 |
 | 暴力版也錯 | 候選空間不完整 | 用更小資料手動列出全部候選 |
-| 複雜度估計過低 | 只計候選數，忽略輸出或檢查成本 | 候選數乘上每個候選成本 |
+| 複雜度估計過低 | 只計候選數，忽略輸出、檢查或排序成本 | 候選數乘上每個候選成本，必要時加上 `O(n log n)` |
+| 記憶體爆量 | 將所有 Subset 或 Permutation 都存進 `result` | 若只需逐一處理，改用 callback |
 | Oracle 對拍誤判 | 多答案只比較完全相同輸出 | 改驗證 Postcondition |
 
 ### 11.17 本章檢查表
@@ -869,16 +909,20 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 - 我知道每個區間重新求和可能形成 O(n³)。
 - 我能使用固定 Left 累積 Sum 降低重複工作。
 - 我知道 n 個元素共有 `2^n` 個 Subset，包含空集合。
-- 我會檢查 Bitmask 型別寬度與位移範圍。
+- 我會檢查 Bitmask 型別寬度與位移範圍，避免 Undefined Behavior。
 - 我能用搜尋樹說明每層的選或不選。
 - 我能在遞迴返回後回復可變 State。
 - 我能區分 Combination 不重視順序，Permutation 重視順序。
+- 我知道 Permutation 遇到重複 Value 時，需要使用 `used` 搭配穩定去重條件。
+- 我知道需要列出所有排列時，可以考慮 `std::next_permutation` 作為快速驗證工具。
 - 我知道 Combination 使用 `start` 避免順序重複。
 - 我能區分按 Index 與按 Value 去重。
+- 我知道按 Value 去重若需要排序，複雜度分析要包含 `O(n log n)`。
 - 我知道同層去重不代表所有層都略過相同 Value。
 - 我能為每項剪枝說明所依賴的 Precondition。
 - 我能證明剪枝排除的是整個不可能 Subtree。
 - 我知道輸出所有 Subset 或 Permutation 本身就需要大量時間。
+- 我知道若只需逐一處理候選，可以使用 callback 避免保存全部結果。
 - 我會保留小型直接解法作為 Oracle。
 - 我知道多答案對拍應檢查 Postcondition。
 
@@ -891,9 +935,9 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 - n 個元素共有 `2^n` 個 Subset，Bitmask 與二元搜尋樹是兩種常見表示。
 - Combination 通常不關心順序；Permutation 將不同順序視為不同答案。
 - Backtracking 需要在離開分支後回復 State，避免不同 Subtree 互相影響。
-- 重複值問題必須先定義按 Index 還是按 Value 區分。
+- 重複值問題必須先定義按 Index 還是按 Value 區分。Permutation 的重複值去重需使用 `used` 維持相同 Value 的穩定選取順序。
 - 同層去重用於避免相同決策位置產生等價分支，不能任意擴大到所有層。
 - 剪枝必須有正確性依據，能證明整個 Subtree 不可能產生合法或更佳答案。
 - 若剪枝依賴非負、排序或單調性，輸入不符合條件時就不能使用。
-- 複雜度應同時考慮候選數量、每個候選的檢查成本與輸出大小。
+- 複雜度應同時考慮候選數量、每個候選的檢查成本、輸出大小與必要的排序成本。
 - 小型 Brute Force 適合作為 Greedy、DP、Hash、Two Pointers 等最佳化解法的 Oracle。
