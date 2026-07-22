@@ -49,7 +49,7 @@ Two Pointers 的重點不是程式中剛好出現兩個 Index，而是每次移�
 - [同方向 Read/Write Pointer](#127-同方向-readwrite-pointer)
 - [完整案例：移除指定值](#128-完整案例移除指定值)
 - [Partition 的區域模型](#129-partition-的區域模型)
-- [完整案例：依 Predicate 穩定分區](#1210-完整案例依-predicate-穩定分區)
+- [完整案例：將符合條件的元素穩定移至前方（非完整分區）](#1210-完整案例將符合條件的元素穩定移至前方非完整分區)
 - [快慢指標](#1211-快慢指標)
 - [Two Pointers 與 Sliding Window](#1212-two-pointers-與-sliding-window)
 - [不適用情境](#1213-不適用情境)
@@ -73,6 +73,8 @@ Two Pointers 是用兩個位置共同描述候選範圍、已處理區域或移�
 | 區域分割 | Boundary、Scan | Partition、Predicate 分區 |
 | 不同速度 | Slow、Fast | Linked List 中點、Cycle Detection |
 | 連續窗口 | Left、Right | Sliding Window 與區間 State |
+
+本章會先討論奠基在「區域切割」上的相向 Pointer、Read/Write Pointer 與 Partition。不同速度的 Slow/Fast 主要依賴節點距離差；連續窗口雖然也常使用 Left/Right，但核心是維護 `[left, right)` 內的聚合 State，例如 Sum、Frequency 或 Validity，後續會在 12.11 與 12.12 分別展開。
 
 ```mermaid
 flowchart TD
@@ -127,6 +129,8 @@ flowchart LR
 ```
 
 Pointer 名稱不是證明。必須明確寫出每個區間代表什麼，才能判斷 Swap、覆寫與移動是否安全。
+
+本節展示的區域模型主要用於「相向」與「同向讀寫」兩類。若 Pointer 是不同速度，例如 Slow/Fast，狀態通常不是候選區域，而是兩個節點之間的距離差；若用於連續區間，也就是 Sliding Window，則會以 `[left, right)` 內的聚合 State 為核心。這些變形仍可放在 Two Pointers 的大分類下，但正確性證明的重點不同。
 
 ### 12.3 相向 Pointer 與排序單調性
 
@@ -337,6 +341,8 @@ while (left < right && nums[right] == rightValue)
 
 跳過時機應在記錄答案後，否則可能漏掉合法 Pair。
 
+注意：當 `leftValue == rightValue` 時，例如 `[2, 2, 2]` 且 Target 為 4，第一個 `while` 可能會將 `left` 移動到 `right`，使第二個 `while` 的條件 `left < right` 直接為 false。此時第二個迴圈不會執行，因此不會越界，也不會漏掉唯一 Value Pair，因為該 Pair 已經在跳過前記錄完成。
+
 ```mermaid
 flowchart TD
     A[找到一組 Value Pair] --> B[記錄答案]
@@ -466,13 +472,13 @@ Partition 將元素依 Predicate 分到不同區域，例如：
 
 Partition 不只一種形式。先決定是否要求穩定順序，再選更新方式。
 
-#### 穩定 Partition
+#### 穩定 Prefix 提取與真正穩定 Partition
 
-Read/Write 可將符合 Predicate 的元素穩定放到前方，但若還要在原地保留不符合元素的完整相對順序，可能需要更多搬移或額外空間。
+Read/Write 可將符合 Predicate 的元素穩定放到前方，這只保證 Prefix 中符合條件者的相對順序。若 Postcondition 還要求不符合 Predicate 的元素也完整保留，且各自維持原來相對順序，才是完整的穩定 Partition。完整穩定 Partition 通常需要額外 Buffer，或使用更複雜的搬移策略。
 
 #### 不穩定相向 Partition
 
-Left 找錯放在左側的元素，Right 找錯放在右側的元素，再 Swap：
+Left 找錯放在左側的元素，Right 找錯放在右側的元素，再 Swap。注意：Swap 會破壞兩側元素的原始相對順序，因此這種 Partition 是不穩定的。若題目要求保留原始順序，請改用穩定 Prefix 提取、額外 Buffer，或其他能維持順序的搬移方法。
 
 ```mermaid
 flowchart LR
@@ -485,9 +491,11 @@ flowchart LR
 
 每段區域的語意必須在 Swap 前後保持成立。
 
-### 12.10 完整案例：依 Predicate 穩定分區
+### 12.10 完整案例：將符合條件的元素穩定移至前方（非完整分區）
 
-將所有偶數穩定移到前方，回傳偶數數量。此版本只保證 Prefix 為偶數結果，後方內容不作完整奇數穩定排列保證。
+將所有偶數依原相對順序移到前方，回傳偶數數量。這個版本可稱為「穩定提取前置」或「條件保留」，在其他教材或題解中也常被稱為 In-place Filter 或 Conditional Compaction。它只保證 Prefix 為偶數的穩定結果，並不保證後方完整保存所有奇數，也不保證奇數的相對順序。
+
+因此，本節標題刻意不稱為完整穩定分區。若題目要求「偶數與奇數都各自保持原順序，並完整排列於 Array 兩側」，這個覆寫版本的 Postcondition 不足，需要額外 Buffer 或其他搬移策略。
 
 ```cpp
 #include <vector>
@@ -515,9 +523,13 @@ Invariant：
 
 > `[0, write)` 是已處理 Prefix 中所有偶數的穩定結果。
 
-若 Postcondition 要求「偶數與奇數都各自保持原順序，並完整排列於同一 Array」，上述覆寫版本不足以保證後半部，需要額外 Buffer 或其他搬移策略。
+Postcondition：
 
-這說明演算法名稱相同，不代表 Postcondition 相同。
+- 回傳值 `write` 是偶數數量。
+- `[0, write)` 依序包含原輸入中的所有偶數。
+- `[write, n)` 不屬於此函式保證的有效結果，不能把它解讀為穩定排列後的奇數區。
+
+這個案例的重點是展示 Read/Write Pointer 的最小約束：只要題目只需要保留符合條件的 Prefix，覆寫是安全且簡潔的；若題目要求真正的穩定 Partition，必須重新定義 Postcondition 與資料搬移方式。
 
 ### 12.11 快慢指標
 
@@ -539,6 +551,18 @@ flowchart LR
 - 進入 Cycle 後，Fast 相對 Slow 每輪多前進一步，最終會相遇。
 
 因此 Two Pointers 是較大的模式分類，不是所有變形都依賴排序 Value。
+
+實作快慢指標時，終止條件必須先保護空指標。以 Linked List Cycle Detection 為例，常見條件是：
+
+```cpp
+while (fast != nullptr && fast->next != nullptr)
+{
+    slow = slow->next;
+    fast = fast->next->next;
+}
+```
+
+若鏈結是空或只有一個節點，`fast == nullptr` 或 `fast->next == nullptr` 會讓迴圈直接停止，避免存取空指標。
 
 ### 12.12 Two Pointers 與 Sliding Window
 
@@ -636,6 +660,8 @@ O(n) 來自每個 Pointer 不回頭，而不是因為 Pointer 數量固定。若
 ### 12.15 C 語言中的 Two Pointers
 
 C 的演算法核心相同，但 Array 需要另外傳入長度。
+
+C 語言通常使用 `size_t` 作為索引型別，因此需先檢查 `length < 2`，避免在計算 `length - 1` 時發生 Unsigned Underflow。前面的 C++ 範例使用 `int` 作為指標索引，空 Array 時可讓 `right = -1`，再由 `left < right` 阻止存取；C 版本不能依賴同樣寫法。
 
 ```c
 #include <stdbool.h>
@@ -755,10 +781,10 @@ size_t remove_value(
 - 我會依 Postcondition 決定是否跳過重複 Value。
 - 我能定義 Read/Write 的 `[0, write)` 結果區域。
 - 我能證明 `write <= read`，不會破壞尚未讀取資料。
-- 我知道 Prefix 正確不代表後半部也符合特定排列。
-- 我會先定義 Partition 是否要求穩定。
+- 我知道穩定提取 Prefix 不等於完整穩定 Partition，Prefix 正確不代表後半部也符合特定排列。
+- 我會先定義 Partition 是否要求穩定，並知道 Swap Partition 會破壞相對順序。
 - 我能區分一般 Two Pointers 與 Sliding Window。
-- 我知道快慢指標利用速度差，而不是排序 Value。
+- 我知道快慢指標利用速度差，而不是排序 Value，並會用 `fast != nullptr && fast->next != nullptr` 保護空指標。
 - 我能指出每輪嚴格縮小的量，說明終止性。
 - 我能用 Pointer 總移動次數說明 O(n)。
 - 若無法填寫排除理由，我會回到直接枚舉重新檢查方法。
@@ -773,8 +799,8 @@ size_t remove_value(
 - 重複值是否略過，取決於答案按 Value 還是按 Index 區分。
 - Read/Write Pointer 將 Array 分成已整理、可覆寫與尚未處理區域。
 - `write <= read` 是原地覆寫通常不會破壞未讀資料的關鍵條件。
-- Partition 前應先定義各區域及穩定性需求，再決定 Swap 或覆寫方式。
-- Slow/Fast Pointer 透過速度差建立位置關係，也是 Two Pointers 的一種。
+- Partition 前應先定義各區域及穩定性需求；Swap Partition 不穩定，穩定 Prefix 提取與完整穩定 Partition 的 Postcondition 也不同。
+- Slow/Fast Pointer 透過速度差建立位置關係，也是 Two Pointers 的一種；實作時需先保護空鏈結與單一節點。
 - Sliding Window 是維護連續區間 State 的同方向 Two Pointers，但不是所有 Two Pointers 都是 Window。
 - 無序資料、非單調 State 或排序會破壞答案語意時，不能直接套用此模式。
 - 每個 Pointer 只單向移動時，總時間通常為 O(n)，但仍需檢查是否存在重掃。
