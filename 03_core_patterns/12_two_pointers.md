@@ -70,11 +70,11 @@ Two Pointers 是用兩個位置共同描述候選範圍、已處理區域或移�
 |---|---|---|
 | 相向 | Left、Right | 排序 Pair、回文、容器兩端比較 |
 | 同方向 | Read、Write | 去除、壓縮、原地整理 |
-| 區域分割 | Boundary、Scan | Partition、Predicate 分區 |
+| Partition | Boundary、Scan，或 Left、Right | 可透過 Read/Write 穩定提取，或相向 Swap 分區 |
 | 不同速度 | Slow、Fast | Linked List 中點、Cycle Detection |
 | 連續窗口 | Left、Right | Sliding Window 與區間 State |
 
-本章會先討論奠基在「區域切割」上的相向 Pointer、Read/Write Pointer 與 Partition。不同速度的 Slow/Fast 主要依賴節點距離差；連續窗口雖然也常使用 Left/Right，但核心是維護 `[left, right)` 內的聚合 State，例如 Sum、Frequency 或 Validity，後續會在 12.11 與 12.12 分別展開。
+本章會先討論奠基在「區域切割」上的相向 Pointer、Read/Write Pointer 與 Partition。Partition 不是單一寫法，可透過 Read/Write 穩定提取 Prefix，也可透過相向 Swap 做不穩定分區，詳見 12.9 與 12.10。不同速度的 Slow/Fast 主要依賴節點距離差；連續窗口雖然也常使用 Left/Right，但核心是維護 `[left, right)` 內的聚合 State，例如 Sum、Frequency 或 Validity，後續會在 12.11 與 12.12 分別展開。
 
 ```mermaid
 flowchart TD
@@ -83,12 +83,15 @@ flowchart TD
     A --> D[不同速度]
     B --> B1[排序 Pair]
     B --> B2[回文]
+    B --> B3[Partition 相向 Swap]
     C --> C1[Read Write]
-    C --> C2[Partition]
+    C --> C2[Partition Read Write 穩定提取]
     C --> C3[Sliding Window]
     D --> D1[Linked List 中點]
     D --> D2[Cycle Detection]
 ```
+
+圖中的 Partition 分成兩個入口：相向 Swap 通常是不穩定分區；Read/Write 則常用於穩定提取符合條件的 Prefix。兩者都屬於 Partition 題型，但 Postcondition 與穩定性保證不同。
 
 共同本質是：
 
@@ -383,7 +386,7 @@ flowchart TD
 write <= read
 ```
 
-因此寫入位置不會越過尚未讀取資料。
+因此寫入位置不會越過尚未讀取資料。當 `write == read` 時，賦值 `nums[write] = nums[read]` 的右側會先讀取目前 `read` 指向的元素，因此不會遺失尚未讀取的資料；這正是 `write <= read` 保證寫入位置不會超前讀取位置的關鍵。
 
 ### 12.8 完整案例：移除指定值
 
@@ -443,13 +446,13 @@ target = 2
 ```mermaid
 stateDiagram-v2
     [*] --> S0
-    S0: read 0，保留 3，write 變 1
+    S0: `read` 0，保留 3，`write` 變 1
     S0 --> S1
-    S1: read 1，略過 2，write 保持 1
+    S1: `read` 1，略過 2，`write` 保持 1
     S1 --> S2
-    S2: read 2，略過 2，write 保持 1
+    S2: `read` 2，略過 2，`write` 保持 1
     S2 --> S3
-    S3: read 3，將 4 寫到 index 1，write 變 2
+    S3: `read` 3，將 4 寫到 index 1，`write` 變 2
     S3 --> [*]: 有效結果為 nums 的前 2 格，即 3,4
 ```
 
@@ -563,6 +566,37 @@ while (fast != nullptr && fast->next != nullptr)
 ```
 
 若鏈結是空或只有一個節點，`fast == nullptr` 或 `fast->next == nullptr` 會讓迴圈直接停止，避免存取空指標。
+
+完整 Cycle Detection 範例如下：
+
+```cpp
+struct ListNode
+{
+    int value;
+    ListNode* next;
+};
+
+bool hasCycle(ListNode* head)
+{
+    ListNode* slow = head;
+    ListNode* fast = head;
+
+    while (fast != nullptr && fast->next != nullptr)
+    {
+        slow = slow->next;
+        fast = fast->next->next;
+
+        if (slow == fast)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+```
+
+這段函式的 Invariant 是：若存在 Cycle，`fast` 進入 Cycle 後會以每輪多一步的速度逐漸追上 `slow`；若不存在 Cycle，`fast` 會先抵達尾端並結束迴圈。
 
 ### 12.12 Two Pointers 與 Sliding Window
 
@@ -738,6 +772,7 @@ size_t remove_value(
 | Pointer | Left、Right、Read、Write、Slow、Fast 各代表什麼？ |
 | 區域 | 每對 Pointer 切分出的區段代表什麼？ |
 | Precondition | 排序、非負、鏈結或其他單調性是否成立？ |
+| Postcondition | 演算法結束時，Pointer 或回傳值代表什麼？哪些區域屬於有效結果？ |
 | 比較結果 | 每種條件下移動哪個 Pointer？ |
 | 排除候選 | 本次移動排除了哪些候選？ |
 | 排除理由 | 為什麼這些候選不可能是答案？ |
@@ -771,6 +806,7 @@ size_t remove_value(
 - 我知道 Two Pointers 的核心是安全排除候選，而不是剛好有兩個 Index。
 - 我能明確定義每個 Pointer 的角色。
 - 我能畫出 Pointer 切分的各段區域。
+- 我能寫出演算法結束時的 Postcondition，包含哪些區域屬於有效結果。
 - 我會確認排序或其他單調性是否為必要 Precondition。
 - 我能說明 Sum 太小時為何移動 Left。
 - 我能說明 Sum 太大時為何移動 Right。
@@ -785,6 +821,7 @@ size_t remove_value(
 - 我會先定義 Partition 是否要求穩定，並知道 Swap Partition 會破壞相對順序。
 - 我能區分一般 Two Pointers 與 Sliding Window。
 - 我知道快慢指標利用速度差，而不是排序 Value，並會用 `fast != nullptr && fast->next != nullptr` 保護空指標。
+- 我能寫出 Cycle Detection 中 `slow`、`fast` 移動與相遇檢查的完整流程。
 - 我能指出每輪嚴格縮小的量，說明終止性。
 - 我能用 Pointer 總移動次數說明 O(n)。
 - 若無法填寫排除理由，我會回到直接枚舉重新檢查方法。
@@ -797,7 +834,7 @@ size_t remove_value(
 - Pointer 移動方向必須由完整不等式推導，不能只記憶模板。
 - 若題目要求原始 Index，排序前應將 Value 與 Index 綁定。
 - 重複值是否略過，取決於答案按 Value 還是按 Index 區分。
-- Read/Write Pointer 將 Array 分成已整理、可覆寫與尚未處理區域。
+- Read/Write Pointer 將 Array 分成已整理、可覆寫與尚未處理區域；`write == read` 時右側先讀取目前元素，因此覆寫安全。
 - `write <= read` 是原地覆寫通常不會破壞未讀資料的關鍵條件。
 - Partition 前應先定義各區域及穩定性需求；Swap Partition 不穩定，穩定 Prefix 提取與完整穩定 Partition 的 Postcondition 也不同。
 - Slow/Fast Pointer 透過速度差建立位置關係，也是 Two Pointers 的一種；實作時需先保護空鏈結與單一節點。
