@@ -482,12 +482,6 @@ void enumerateSubsetsWithCallback(
 
 這樣仍需走訪 `O(2^n)` 個候選，但額外空間可維持在遞迴深度與 `current` 所需的 `O(n)`，不需要保存 `O(2^n)` 份結果。
 
-#### Backtracking 與 DP 記憶化的界線
-
-本節的回朔法用於「輸出所有 Subset」。若題目只是「計算 Subset 數量」或「求最佳 Subset Sum」，則可能適合使用 Dynamic Programming 搭配記憶化，避免重複計算狀態。
-
-但若題目要求列出所有具體 Subset，記憶化通常無法改變輸出大小本身。若把每個 State 對應的所有 `current` 結果都存起來，反而可能造成更大的記憶體壓力。因此需先區分目標是「輸出所有解」、「計數」還是「求最佳值」，再決定使用 Backtracking 或 DP。
-
 #### 為什麼需要回復 State
 
 選取分支結束後：
@@ -535,6 +529,18 @@ C(n, k)
 ```text
 n!
 ```
+
+#### 搜尋樹決策不同
+
+```mermaid
+flowchart TD
+    A[Combination] --> B[從 start 之後選下一個 Index]
+    B --> C[Index 單調增加，避免順序重複]
+    D[Permutation] --> E[每一層選任一尚未使用 Index]
+    E --> F[使用 used 記錄可選候選]
+```
+
+Combination 透過 `start` 限制後續只能向右選。Permutation 每層則可選任一未使用元素。
 
 #### C++ 標準庫：`std::next_permutation`
 
@@ -617,18 +623,6 @@ permuteUnique(nums, 0, curr, used, res);
 ```
 
 條件 `!used[i - 1]` 保證重複元素只會以排序後的相對順序被選入，避免產生鏡像般的重複排列。
-
-#### 搜尋樹決策不同
-
-```mermaid
-flowchart TD
-    A[Combination] --> B[從 start 之後選下一個 Index]
-    B --> C[Index 單調增加，避免順序重複]
-    D[Permutation] --> E[每一層選任一尚未使用 Index]
-    E --> F[使用 used 記錄可選候選]
-```
-
-Combination 透過 `start` 限制後續只能向右選。Permutation 每層則可選任一未使用元素。
 
 ### 11.9 完整案例：產生固定長度 Combination
 
@@ -872,6 +866,14 @@ Permutation 的 `n!` 成長很快：
 ```
 
 需要根據實際 n 限制判斷是否可行，而不是只看程式碼簡短。
+
+#### Backtracking 與 DP 記憶化的界線
+
+若題目要求「輸出所有 Subset」，回朔法通常是直接且自然的表達方式，因為每個具體答案都必須被產生。此時記憶化通常無法改變輸出大小本身。
+
+若題目改成「計算 Subset 數量」或「求最佳 Subset Sum」，則可能適合使用 Dynamic Programming 搭配記憶化，避免重複計算狀態。
+
+因此需先區分目標是「輸出所有解」、「計數」還是「求最佳值」。若把每個 State 對應的所有 `current` 結果都存起來，反而可能造成更大的記憶體壓力。
 
 ### 11.13 直接解法作為測試 Oracle
 
