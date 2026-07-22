@@ -301,9 +301,9 @@ n(n + 1) / 2
 
 ```mermaid
 flowchart LR
-    L0[left 0] --> A01[[0,1)] --> A02[[0,2)] --> A03[[0,3)]
-    L1[left 1] --> A12[[1,2)] --> A13[[1,3)]
-    L2[left 2] --> A23[[2,3)]
+    L0["left 0"] --> A01["[0,1)"] --> A02["[0,2)"] --> A03["[0,3)"]
+    L1["left 1"] --> A12["[1,2)"] --> A13["[1,3)"]
+    L2["left 2"] --> A23["[2,3)"]
 ```
 
 #### 每次重新求和
@@ -340,7 +340,7 @@ for (int left = 0; left < n; ++left)
 }
 ```
 
-這裡仍然維持 Half-open Interval `[left, end)`。每次 `end` 往右擴張一格時，新加入的元素是 `nums[end - 1]`。相鄰區間共用前一個 Sum，將總時間降為 O(n²)。這個改善直接來自辨識重複工作。
+這裡仍然維持 Half-open Interval `[left, end)`。每次 `end` 往右擴張一格時，新加入的元素是 `nums[end - 1]`。相鄰區間共用前一個 Sum，能將「枚舉所有區間，且每個區間可在 O(1) 內處理」的總時間降為 O(n²)。若 `check(left, end, sum)` 本身還需要 O(n) 的工作，例如複製區間或重新掃描元素，則總成本仍需再乘上該因子。這個改善直接來自辨識重複工作。
 
 ### 11.6 Subset 與 Bitmask
 
@@ -482,6 +482,12 @@ void enumerateSubsetsWithCallback(
 
 這樣仍需走訪 `O(2^n)` 個候選，但額外空間可維持在遞迴深度與 `current` 所需的 `O(n)`，不需要保存 `O(2^n)` 份結果。
 
+#### Backtracking 與 DP 記憶化的界線
+
+本節的回朔法用於「輸出所有 Subset」。若題目只是「計算 Subset 數量」或「求最佳 Subset Sum」，則可能適合使用 Dynamic Programming 搭配記憶化，避免重複計算狀態。
+
+但若題目要求列出所有具體 Subset，記憶化通常無法改變輸出大小本身。若把每個 State 對應的所有 `current` 結果都存起來，反而可能造成更大的記憶體壓力。因此需先區分目標是「輸出所有解」、「計數」還是「求最佳值」，再決定使用 Backtracking 或 DP。
+
 #### 為什麼需要回復 State
 
 選取分支結束後：
@@ -559,6 +565,11 @@ Permutation 的重複值去重不能直接套用 Combination 的 `i > start`。C
 #include <algorithm>
 #include <vector>
 
+// ------------------------------------------------------------------
+// 重要前置條件：呼叫 permuteUnique 前，必須先對 nums 排序。
+// 若未排序，nums[i] == nums[i - 1] 無法完整辨識重複 Value，
+// 去重條件將無法正確運作。
+// ------------------------------------------------------------------
 void permuteUnique(
     std::vector<int>& nums,
     int pos,
@@ -596,8 +607,13 @@ void permuteUnique(
     }
 }
 
-// 呼叫前：
-// std::sort(nums.begin(), nums.end());
+```
+
+典型呼叫方式如下：
+
+```cpp
+std::sort(nums.begin(), nums.end());
+permuteUnique(nums, 0, curr, used, res);
 ```
 
 條件 `!used[i - 1]` 保證重複元素只會以排序後的相對順序被選入，避免產生鏡像般的重複排列。
@@ -987,7 +1003,7 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 | 重複 Pair | 同時枚舉 `(i,j)` 與 `(j,i)` | 無順序 Pair 是否使用 `j = i + 1` |
 | 漏掉 Pair | 迴圈上界或起點錯誤 | 是否完整涵蓋 `0 <= i < j < n` |
 | 區間少一個元素 | Inclusive 與 Half-open 混用 | 明確使用 `[left,right)` |
-| 區間解法變成 O(n³) | 每個區間重新走訪求和 | 固定 Left 時累積 Sum |
+| 區間解法變成 O(n³) | 每個區間重新走訪求和 | 固定 Left，並以 Half-open 的 `end` 累積 Sum |
 | Subset 數量不對 | 忘記空集合或重複 Mask | 是否包含 `mask = 0` |
 | Bitmask 位移錯誤 | 型別寬度不足或 n 過大 | 位移量是否小於型別 Bit 數，避免 Undefined Behavior |
 | Combination 出現順序重複 | 後續仍可選較小 Index | 使用遞增 `start` |
@@ -1026,6 +1042,7 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 - 我知道在迴圈內剪枝時，`return`、`continue` 與 `break` 的語意不同。
 - 我知道輸出所有 Subset 或 Permutation 本身就需要大量時間。
 - 我知道若只需逐一處理候選，可以使用 callback 避免保存全部結果。
+- 我能區分輸出所有解、計數與求最佳值，避免把 Backtracking 與 DP 記憶化混用。
 - 我會保留小型直接解法作為 Oracle。
 - 我知道多答案對拍應檢查 Postcondition。
 
@@ -1043,4 +1060,5 @@ Precondition 是 `current` 至少可容納 `length` 個元素。若結果需要�
 - 剪枝必須有正確性依據，能證明整個 Subtree 不可能產生合法或更佳答案。
 - 若剪枝依賴非負、排序或單調性，輸入不符合條件時就不能使用。
 - 複雜度應同時考慮候選數量、每個候選的檢查成本、輸出大小與必要的排序成本。
+- 輸出所有候選與只求計數或最佳值是不同問題，前者通常受輸出大小限制，後者才更常考慮 DP 或記憶化。
 - 小型 Brute Force 適合作為 Greedy、DP、Hash、Two Pointers 等最佳化解法的 Oracle。
