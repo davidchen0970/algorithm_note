@@ -1,6 +1,6 @@
-## 第 10 章　Hash Table、Set 與 Map
+# 第 10 章　Hash Table、Set 與 Map
 
-### 適用範圍
+## 適用範圍
 
 本章介紹 Hash Table 的資料模型，以及 Key、Value、Hash Function、Equality、Collision、Bucket、Load Factor 與 Rehash 如何共同影響正確性和效能。
 
@@ -26,7 +26,7 @@ Hash Table 常用於 Membership、Frequency 與 Value-to-State Mapping，但「�
 7. 自訂 Key 時同步設計 Equality 與 Hash。
 8. 若需要排序或範圍語意，改用 Ordered Container 或排序。
 
-### 適用讀者
+## 適用讀者
 
 - 需要處理 Membership、Frequency 與 Value-to-State Mapping 的讀者。
 - 容易把 Set 與 Map 混在一起的讀者。
@@ -37,8 +37,9 @@ Hash Table 常用於 Membership、Frequency 與 Value-to-State Mapping，但「�
 - 需要建立自訂 Struct Key 的讀者。
 - 需要在 Hash Table、Ordered Map 與排序之間選擇的讀者。
 
-### 快速導覽
+## 快速導覽
 
+- [C++ 容器基礎](#c-容器基礎unordered_set-與-unordered_map)
 - [Hash Table 到底保存什麼](#101-hash-table-到底保存什麼)
 - [Hash、Bucket、Collision 與 Equality](#102-hashbucketcollision-與-equality)
 - [Set 與 Map 的選擇](#103-set-與-map-的選擇)
@@ -55,12 +56,132 @@ Hash Table 常用於 Membership、Frequency 與 Value-to-State Mapping，但「�
 - [本章檢查表](#1014-本章檢查表)
 - [本章重點](#1015-本章重點)
 
-### 10.1 Hash Table 到底保存什麼
+## C++ 容器基礎：Set、Map 與無序版本
+
+若你對 C++ 的關聯式容器不熟悉，請先閱讀本節。C++ 標準庫提供兩大類關聯式容器：有序版（`set` / `map`）與無序版（`unordered_set` / `unordered_map`）。兩者皆以 Key 為查詢主軸，差異在於底層實作與元素的迭代順序。
+
+### 有序版：`set` 與 `map`
+
+底層為紅黑樹（平衡二元樹），元素會依 Key 自動排序（預設由小到大，可自訂比較函式）。
+
+#### `set`（集合）
+儲存不重複的 Key，僅記錄存在性。
+
+```cpp
+#include <set>
+
+std::set<int> scores;
+scores.insert(100);
+scores.insert(90);
+scores.insert(95);
+scores.insert(90);        // 重複插入無效
+
+// 走訪順序固定：90, 95, 100
+for (int s : scores) {
+    // 處理 s
+}
+
+if (scores.find(95) != scores.end()) {
+    // 存在
+}
+// C++20 提供 contains
+if (scores.contains(100)) {
+    // 存在
+}
+```
+
+#### `map`（字典）
+儲存 Key-Value 配對，Key 不重複且排序。
+
+```cpp
+#include <map>
+
+std::map<std::string, int> age;
+age["Alice"] = 30;
+age["Bob"] = 25;
+age["Alice"] = 31;        // 覆蓋舊值
+
+for (const auto& pair : age) {
+    // pair.first 為 Key，pair.second 為 Value
+}
+
+// 安全查詢（避免意外插入）
+if (auto it = age.find("Charlie"); it != age.end()) {
+    // 使用 it->second
+}
+```
+
+### 無序版：`unordered_set` 與 `unordered_map`
+
+底層為 Hash Table，元素不排序，迭代順序不定（隨 Bucket 分佈而變）。查詢平均 O(1)，但最差可能退化。
+
+用法與有序版幾乎相同，僅標頭檔與容器名稱不同：
+
+```cpp
+#include <unordered_set>
+#include <unordered_map>
+
+std::unordered_set<int> fast_set;
+fast_set.insert(10);
+
+std::unordered_map<int, int> freq;
+++freq[5];   // Key 不存在時會先插入 0 再遞增
+```
+
+無序版迭代順序不固定，不可依賴。
+
+### 共同注意事項：`operator[]` 的副作用
+
+無論是 `map` 或 `unordered_map`，使用 `operator[]` 時若 Key 不存在，會自動插入一個 Value 的預設值（例如 int 為 0，string 為空字串）。此行為適合頻率統計（`++count[key]`），但在純查詢情境下會意外修改容器。
+
+```cpp
+std::map<int, int> m;
+int val = m[42];   // 插入 Key 42，Value 為 0
+```
+
+因此，僅需查詢時應優先使用 `find`（C++11）或 `contains`（C++20）。
+
+### 迭代器與範圍 for
+
+四種容器均支援迭代器與範圍 for 迴圈：
+
+```cpp
+for (const auto& entry : age) {
+    // entry.first 為 Key，entry.second 為 Value
+}
+// C++17 結構化綁定
+for (const auto& [name, years] : age) {
+    // 直接使用 name 與 years
+}
+```
+
+### 其他常用成員函式
+
+| 函式 | 作用 |
+| :--- | :--- |
+| `size()` | 元素數量 |
+| `empty()` | 是否為空 |
+| `clear()` | 清空所有元素 |
+| `insert(key)` 或 `insert({key, value})` | 插入 |
+| `erase(key)` | 刪除指定 Key |
+| `find(key)` | 回傳迭代器，找不到回傳 `end()` |
+| `contains(key)` | C++20，回傳 bool |
+| `reserve(n)` | **僅無序版本**，預先分配 Bucket 空間，減少 Rehash（詳見 10.7） |
+
+### 選擇依據簡述
+
+- 需要依 Key 排序、範圍查詢、找最小/最大 Key → 使用 `set` / `map`。
+- 僅需快速存在性查詢或頻率統計，且不關心順序 → 使用 `unordered_set` / `unordered_map`。
+
+更詳細的決策流程請參考本章 10.9 節。
+```
+
+## 10.1 Hash Table 到底保存什麼
 
 Hash Table 將 Key 經過 Hash Function 轉成 Hash Value，再由容器定位 Bucket。
 
 ```mermaid
-flowchart LR
+flowchart TD
     K[Key] --> H[Hash Function]
     H --> V[Hash Value]
     V --> B[Bucket]
@@ -71,7 +192,7 @@ Hash Value 相同不代表 Key 相同。不同 Key 可能 Collision，因此仍�
 
 Hash Table 的核心優勢是能以 Key 快速定位候選 Bucket，而不是保證每個 Key 都取得唯一 Hash Value。
 
-### 10.2 Hash、Bucket、Collision 與 Equality
+## 10.2 Hash、Bucket、Collision 與 Equality
 
 假設 Bucket 數量為 8，容器可能使用 Hash Value 的某種轉換定位 Bucket。兩個不同 Key 可能進入同一 Bucket：
 
@@ -99,9 +220,9 @@ hash(a) == hash(b)
 
 反方向不成立。Hash 相同的兩個 Key 可以不相等。
 
-### 10.3 Set 與 Map 的選擇
+## 10.3 Set 與 Map 的選擇
 
-#### Set
+### Set
 
 只需要判斷 Key 是否存在：
 
@@ -115,7 +236,7 @@ std::unordered_set<int> seen;
 - 哪些 Node 已訪問。
 - 哪些設定已出現。
 
-#### Map
+### Map
 
 需要保存 Key 對應的額外 State：
 
@@ -146,7 +267,7 @@ flowchart TD
 
 > `map[key]` 保存＿＿＿＿。
 
-### 10.4 安全查詢與 operator[]
+## 10.4 安全查詢與 operator[]
 
 `unordered_map::operator[]` 在 Key 不存在時，會插入預設建構的 Value。
 
@@ -192,13 +313,13 @@ flowchart TD
 
 `at(key)` 不會插入，但 Key 不存在時會丟出 `std::out_of_range`。使用何種介面取決於錯誤處理規格。
 
-### 10.5 完整案例：Frequency
+## 10.5 完整案例：Frequency
 
-#### 問題規格
+### 問題規格
 
 計算整數 Array 中每個 Value 出現次數。
 
-#### C++ 解法
+### C++ 解法
 
 ```cpp
 #include <unordered_map>
@@ -211,21 +332,21 @@ std::unordered_map<int, int> countFrequency(
 
     for (int value : nums)
     {
-        ++frequency[value];
+        ++frequency[value];   // 若不存在會插入 0 後再加 1
     }
 
     return frequency;
 }
 ```
 
-#### Key 與 Value 語意
+### Key 與 Value 語意
 
 ```text
 Key   = 輸入中的整數 Value
 Value = 該整數在已處理 Prefix 中出現的次數
 ```
 
-#### Loop Invariant
+### Loop Invariant
 
 每輪開始前，對所有已出現在 Prefix 中的 Key：
 
@@ -236,7 +357,7 @@ frequency[key] 等於 key 在已處理 Prefix 的出現次數
 本輪看到 `value` 時，只需將對應次數增加 1。
 
 ```mermaid
-flowchart LR
+flowchart TD
     I[讀取 Value 4] --> Q{Key 4 已存在嗎}
     Q -->|否| Z[operator[] 插入 0]
     Q -->|是| V[取得目前次數]
@@ -244,24 +365,24 @@ flowchart LR
     V --> B[增加 1]
 ```
 
-#### 固定值域時不一定需要 Hash Table
+### 固定值域時不一定需要 Hash Table
 
 若輸入保證只在 0 到 100，可使用固定 Array。資料結構選擇應考慮 Key 值域，而不是看到 Frequency 就固定使用 Hash Map。
 
-### 10.6 完整案例：Two Sum
+## 10.6 完整案例：Two Sum
 
-#### 問題規格
+### 問題規格
 
 給定整數 Array 與 Target，找出兩個不同 Index，使對應 Value 總和等於 Target。若無答案，回傳空結果。
 
-#### State 定義
+### State 定義
 
 ```text
 Key   = 已處理過的 Value
 Value = 該 Value 的某個先前 Index
 ```
 
-#### C++ 解法
+### C++ 解法
 
 ```cpp
 #include <optional>
@@ -287,14 +408,14 @@ std::optional<std::pair<int, int>> twoSum(
             return std::pair{it->second, i};
         }
 
-        previousIndex[nums[i]] = i;
+        previousIndex[nums[i]] = i;   // 先查後插，避免配對自己
     }
 
     return std::nullopt;
 }
 ```
 
-#### 為什麼先查再插
+### 為什麼先查再插
 
 若先插入目前值，在 `target == 2 * nums[i]` 時，可能使用同一 Index 配對自己。
 
@@ -309,7 +430,7 @@ flowchart TD
 
 Map 只保存先前 Index，因此查到的 Index 一定和目前 `i` 不同。
 
-#### Loop Invariant
+### Loop Invariant
 
 每輪開始前：
 
@@ -317,11 +438,11 @@ Map 只保存先前 Index，因此查到的 Index 一定和目前 `i` 不同。
 2. 每個 Key 對應某個先前出現位置。
 3. 若尚未回傳答案，已檢查的所有 Pair 都不符合 Target。
 
-#### Overflow
+### Overflow
 
 `target - nums[i]` 可能發生整數 Overflow。若題目值域無法保證安全，可先轉成較寬型別，並讓 Hash Map Key 使用相同型別。
 
-### 10.7 Load Factor、Reserve 與 Rehash
+## 10.7 Load Factor、Reserve 與 Rehash
 
 Load Factor 大致表示：
 
@@ -332,7 +453,7 @@ Load Factor 大致表示：
 當 Load Factor 過高時，容器可能增加 Bucket 並重新配置元素，這稱為 Rehash。
 
 ```mermaid
-flowchart LR
+flowchart TD
     O[舊 Bucket 陣列] --> R[Rehash]
     R --> N[較大的新 Bucket 陣列]
     R --> M[所有元素依新 Bucket 配置重新定位]
@@ -348,7 +469,7 @@ map.reserve(expectedCount);
 
 這可以降低成長過程中的 Rehash 次數，但不是邏輯正確性的必要條件，也不保證永遠不再 Rehash。插入數量超過預估時仍可能重新配置。
 
-#### Reference 與 Pointer
+### Reference 與 Pointer
 
 標準容器對不同操作的失效保證有細節差異。撰寫一般演算法時，較安全的做法是：
 
@@ -356,7 +477,7 @@ map.reserve(expectedCount);
 - 插入後重新使用 `find` 取得位置。
 - 若要降低 Rehash，事先 `reserve`。
 
-### 10.8 自訂 Key
+## 10.8 自訂 Key
 
 假設要以座標作為 Key：
 
@@ -402,15 +523,15 @@ flowchart TD
     D --> F[若 Hash 相同，使用 Equality 區分 Collision]
 ```
 
-#### 不一致的危險
+### 不一致的危險
 
 若 Equality 忽略某欄位，但 Hash 包含該欄位，兩個被視為相等的 Key 可能進入不同 Bucket，破壞容器查詢假設。
 
-#### Key 不應任意修改
+### Key 不應任意修改
 
 Key 放入 Hash Table 後，其影響 Hash 或 Equality 的欄位不應被修改。否則元素可能仍位於舊 Bucket，但新的 Hash 已指向其他位置，造成無法正常找到。
 
-### 10.9 Hash 與 Ordered Container 的選擇
+## 10.9 Hash 與 Ordered Container 的選擇
 
 | 需求 | 常見選擇 |
 |---|---|
@@ -434,7 +555,7 @@ flowchart TD
 
 Hash Table 不提供固定迭代順序。若輸出需排序，不應依賴觀察到的 Bucket 順序。
 
-### 10.10 正確性與複雜度
+## 10.10 正確性與複雜度
 
 `unordered_map` 與 `unordered_set` 的查找、插入及刪除通常描述為平均 O(1)，但最差情況可能退化。
 
@@ -446,7 +567,7 @@ Hash Table 不提供固定迭代順序。若輸出需排序，不應依賴觀察
 - 自訂 Hash 的計算成本。
 
 ```mermaid
-flowchart LR
+flowchart TD
     K[每個輸入 Key] --> H[計算 Hash]
     H --> B[定位 Bucket]
     B --> C[檢查 Bucket 中候選]
@@ -462,7 +583,7 @@ flowchart LR
 3. 查詢與插入順序符合 Index、時間或資料依賴。
 4. 重複 Key 的覆寫、累加或保留規則明確。
 
-### 10.11 C 語言中的 Hash Table
+## 10.11 C 語言中的 Hash Table
 
 C 標準函式庫沒有通用 Hash Table。專案可使用既有 Library，或依需求自行建立。
 
@@ -484,7 +605,7 @@ Open Addressing 還需要區分：
 - 曾使用但已刪除的 Tombstone。
 
 ```mermaid
-flowchart LR
+flowchart TD
     K[Key] --> H[Hash 到初始 Slot]
     H --> O{Slot 狀態}
     O -->|空且從未使用| N[查詢失敗或插入]
@@ -505,7 +626,7 @@ flowchart LR
 
 除非題目要求，正式專案通常應優先使用成熟 Library，而不是臨時建立缺少完整測試的 Hash Table。
 
-### 10.12 建立自己的 Hash Table 分析表
+## 10.12 建立自己的 Hash Table 分析表
 
 | 欄位 | 要回答的問題 |
 |---|---|
@@ -522,7 +643,7 @@ flowchart LR
 | 可變性 | Key 欄位在插入後是否保持不變？ |
 | 邊界 | 空輸入、重複值、極端 Key 與 Collision 如何測試？ |
 
-### 10.13 常見問題與判讀
+## 10.13 常見問題與判讀
 
 | 現象 | 可能原因 | 第一輪檢查 |
 |---|---|---|
@@ -537,7 +658,7 @@ flowchart LR
 | 複雜度描述錯誤 | 混淆平均與最差 | 明確寫出容器保證與 Collision 風險 |
 | 記憶體使用超出預期 | Bucket、Load Factor 與 Node 開銷 | 評估值域、元素數與替代結構 |
 
-### 10.14 本章檢查表
+## 10.14 本章檢查表
 
 - 我能說明 Hash、Bucket、Collision 與 Equality 的關係。
 - 我知道 Hash 相同不代表 Key 相等。
@@ -558,7 +679,7 @@ flowchart LR
 - 我知道自訂 Key 插入後不應修改影響 Hash 的欄位。
 - 我能為自訂 Key 同步設計 Equality 與 Hash。
 
-### 10.15 本章重點
+## 10.15 本章重點
 
 - Hash Table 使用 Hash 縮小候選 Bucket，再用 Equality 確認真正相同的 Key。
 - Collision 是正常情況，不同 Key 可以擁有相同 Hash。
